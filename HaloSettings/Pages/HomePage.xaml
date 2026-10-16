@@ -30,17 +30,9 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border
-                    Width="208"
-                    Height="130"
-                    Background="#FF0B0B0F"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="6">
-                    <Viewbox Stretch="Uniform">
-                        <controls:LedPreview x:Name="Preview" Width="352" Height="220" />
-                    </Viewbox>
-                </Border>
+                <Viewbox Width="208" Height="134" Stretch="Uniform">
+                    <controls:LedPreview x:Name="Preview" Width="420" Height="270" />
+                </Viewbox>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                     <TextBlock
                         Style="{StaticResource SubtitleTextBlockStyle}"

@@ -1,6 +1,9 @@
+using System.Numerics;
 using HaloSettings.Services;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
@@ -11,6 +14,8 @@ namespace HaloSettings.Controls;
 /// <summary>
 /// A monitor drawn at the centre with the strip's live colours as a soft blur around it.
 /// Each LED is a wide radial glow; neighbours overlap into one continuous halo.
+/// The glows are composition visuals: a XAML RadialGradientBrush ignores colour changes to its stops
+/// once it has rendered, which froze the preview on its first frame.
 /// The screen itself is always dark: it is a picture of a monitor, not app chrome.
 /// </summary>
 public sealed partial class LedPreview : Grid
@@ -18,21 +23,25 @@ public sealed partial class LedPreview : Grid
     private const double ScreenWidth = 236;
     private const double ScreenHeight = 134;
     private const double ScreenLift = 22;
-    private const double GlowSize = 120;
-    private const double GlowOffset = 20;
-    private const byte GlowAlpha = 130;
+    private const double GlowSize = 100;
+    private const double GlowOffset = 16;
+    private const byte GlowAlpha = 180;
     // Values this low are capture noise on a black frame; normalising them would paint speckles.
     private const byte NoiseFloor = 6;
 
     private readonly Canvas _glow = new() { IsHitTestVisible = false };
     private readonly TextBlock _caption;
-    private readonly List<(Ellipse Glow, GradientStop Inner, GradientStop Outer)> _leds = [];
+    private readonly Compositor _compositor;
+    private readonly ContainerVisual _glowRoot;
+    private readonly List<(SpriteVisual Glow, CompositionColorGradientStop Inner, CompositionColorGradientStop Mid, CompositionColorGradientStop Outer)> _leds = [];
     private IReadOnlyList<Slot> _slots = [];
     private byte[] _shown = [];
 
     public LedPreview()
     {
-        Height = 220;
+        _compositor = ElementCompositionPreview.GetElementVisual(_glow).Compositor;
+        _glowRoot = _compositor.CreateContainerVisual();
+        ElementCompositionPreview.SetElementChildVisual(_glow, _glowRoot);
         _caption = new TextBlock
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -97,21 +106,25 @@ public sealed partial class LedPreview : Grid
             return;
         }
         _slots = slots;
-        _glow.Children.Clear();
+        _glowRoot.Children.RemoveAll();
         _leds.Clear();
         _shown = [];
+        var clear = Color.FromArgb(0, 0, 0, 0);
         foreach (var _ in _slots)
         {
-            var inner = new GradientStop { Offset = 0, Color = Color.FromArgb(0, 0, 0, 0) };
-            var outer = new GradientStop { Offset = 1, Color = Color.FromArgb(0, 0, 0, 0) };
-            var glow = new Ellipse
-            {
-                Width = GlowSize,
-                Height = GlowSize,
-                Fill = new RadialGradientBrush { GradientStops = { inner, outer } },
-            };
-            _glow.Children.Add(glow);
-            _leds.Add((glow, inner, outer));
+            var inner = _compositor.CreateColorGradientStop(0, clear);
+            // A mid stop bends the falloff, so each glow has faded out before the edge of the control.
+            var mid = _compositor.CreateColorGradientStop(0.45f, clear);
+            var outer = _compositor.CreateColorGradientStop(1, clear);
+            var brush = _compositor.CreateRadialGradientBrush();
+            brush.ColorStops.Add(inner);
+            brush.ColorStops.Add(mid);
+            brush.ColorStops.Add(outer);
+            var glow = _compositor.CreateSpriteVisual();
+            glow.Size = new Vector2((float)GlowSize);
+            glow.Brush = brush;
+            _glowRoot.Children.InsertAtTop(glow);
+            _leds.Add((glow, inner, mid, outer));
         }
         Arrange();
     }
@@ -122,7 +135,7 @@ public sealed partial class LedPreview : Grid
         for (var i = 0; i < _leds.Count && i * 3 + 2 < rgb.Length; i++)
         {
             byte r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
-            // Touching a brush re-rasterises its gradient; leave unchanged LEDs alone.
+            // Skip unchanged LEDs: static modes resend the same frame.
             if (i * 3 + 2 < _shown.Length && _shown[i * 3] == r && _shown[i * 3 + 1] == g && _shown[i * 3 + 2] == b)
             {
                 continue;
@@ -130,15 +143,17 @@ public sealed partial class LedPreview : Grid
             var led = _leds[i];
             var (alpha, hue) = Glow(r, g, b);
             led.Inner.Color = Color.FromArgb(alpha, hue.R, hue.G, hue.B);
+            led.Mid.Color = Color.FromArgb((byte)(alpha / 4), hue.R, hue.G, hue.B);
             led.Outer.Color = Color.FromArgb(0, hue.R, hue.G, hue.B);
         }
         _shown = rgb.ToArray();
     }
 
     /// <summary>
-    /// Light, not paint. The hue is shown at full strength and the glow's opacity follows the LED's
-    /// brightness on a square-root curve, so dim screen edges still read as their colour while an
-    /// unlit LED shows nothing at all, never a black smudge.
+    /// Light, not paint. Screen edges are usually dim, while the strip itself reads bright, so each
+    /// channel is lifted on a square-root curve: hues keep their balance and greys stay grey, never
+    /// turning white. Opacity follows the brightest channel on the same curve, so an unlit LED shows
+    /// nothing at all, not a black smudge.
     /// </summary>
     private static (byte Alpha, Color Hue) Glow(byte r, byte g, byte b)
     {
@@ -147,10 +162,11 @@ public sealed partial class LedPreview : Grid
         {
             return (0, Color.FromArgb(0, 0, 0, 0));
         }
-        var scale = 255.0 / peak;
-        var hue = Color.FromArgb(255, (byte)(r * scale), (byte)(g * scale), (byte)(b * scale));
+        var hue = Color.FromArgb(255, Lift(r), Lift(g), Lift(b));
         return ((byte)(GlowAlpha * Math.Sqrt(peak / 255.0)), hue);
     }
+
+    private static byte Lift(byte v) => (byte)Math.Round(255 * Math.Sqrt(v / 255.0));
 
     private void Arrange()
     {
@@ -172,9 +188,10 @@ public sealed partial class LedPreview : Grid
                 Side.Right => (1.0, 0.0),
                 _ => (0.0, 1.0),
             };
-            var glow = _leds[i].Glow;
-            Canvas.SetLeft(glow, left + cx * ScreenWidth + nx * GlowOffset - GlowSize / 2);
-            Canvas.SetTop(glow, top + cy * ScreenHeight + ny * GlowOffset - GlowSize / 2);
+            _leds[i].Glow.Offset = new Vector3(
+                (float)(left + cx * ScreenWidth + nx * GlowOffset - GlowSize / 2),
+                (float)(top + cy * ScreenHeight + ny * GlowOffset - GlowSize / 2),
+                0);
         }
     }
 }
