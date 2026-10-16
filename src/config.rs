@@ -83,6 +83,21 @@ impl Default for ScreenSettings {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct OpenRgb {
+    pub enabled: bool,
+    pub port: u16,
+    /// Only these devices (by OpenRGB name) are painted.
+    pub devices: Vec<String>,
+}
+
+impl Default for OpenRgb {
+    fn default() -> Self {
+        Self { enabled: false, port: 6742, devices: Vec::new() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub enabled: bool,
     pub brightness: f32,
@@ -92,6 +107,7 @@ pub struct Config {
     pub screen: ScreenSettings,
     pub layout: Layout,
     pub autostart: bool,
+    pub openrgb: OpenRgb,
     pub port_hint: Option<String>,
 }
 
@@ -106,6 +122,7 @@ impl Default for Config {
             screen: ScreenSettings::default(),
             layout: Layout::default(),
             autostart: false,
+            openrgb: OpenRgb::default(),
             port_hint: None,
         }
     }

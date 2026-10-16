@@ -28,6 +28,7 @@ pub struct Shared {
     status: Mutex<Status>,
     pub status_rev: AtomicU64,
     leds: Mutex<Vec<[u8; 3]>>,
+    ambient: Mutex<[u8; 3]>,
     pub leds_rev: AtomicU64,
     pub rescan: AtomicBool,
     pub quit: AtomicBool,
@@ -47,6 +48,7 @@ impl Shared {
             status: Mutex::new(Status::default()),
             status_rev: AtomicU64::new(1),
             leds: Mutex::new(Vec::new()),
+            ambient: Mutex::new([0; 3]),
             leds_rev: AtomicU64::new(0),
             rescan: AtomicBool::new(false),
             quit: AtomicBool::new(false),
@@ -65,6 +67,11 @@ impl Shared {
 
     pub fn leds(&self) -> Vec<[u8; 3]> {
         lock(&self.leds).clone()
+    }
+
+    /// Average colour of what the strip is showing right now, brightness included.
+    pub fn ambient(&self) -> [u8; 3] {
+        *lock(&self.ambient)
     }
 
     pub fn set_waker(&self, waker: Waker) {
@@ -91,7 +98,7 @@ impl Shared {
         self.wake();
     }
 
-    fn update_status(&self, f: impl FnOnce(&Status) -> Status) {
+    pub fn update_status(&self, f: impl FnOnce(&Status) -> Status) {
         {
             let mut current = lock(&self.status);
             let next = f(&current);
@@ -224,6 +231,12 @@ impl Screen {
     }
 }
 
+fn average(frame: &[[u8; 3]]) -> [u8; 3] {
+    let n = frame.len().max(1) as u32;
+    let sum = frame.iter().fold([0u32; 3], |acc, c| [acc[0] + c[0] as u32, acc[1] + c[1] as u32, acc[2] + c[2] as u32]);
+    sum.map(|v| (v / n) as u8)
+}
+
 fn ease(x: f32) -> f32 {
     x * x * (3.0 - 2.0 * x)
 }
@@ -296,6 +309,7 @@ fn run(shared: &Shared) {
         preview.extend(current.iter().map(|c| effects::to8(effects::scale(*c, master))));
 
         link.push(shared, &frame);
+        *lock(&shared.ambient) = average(&frame);
         shared.publish_leds(&preview);
         shared.save_if_due();
 

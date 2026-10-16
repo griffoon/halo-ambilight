@@ -2,7 +2,7 @@
 
 use crate::config::{Config, Mode};
 use crate::engine::{self, Shared};
-use crate::{art, ipc, log};
+use crate::{art, ipc, log, openrgb};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
@@ -57,6 +57,7 @@ pub fn run(open_window: bool) {
         log::line(&format!("ipc failed: {e}"));
     }
     let engine = engine::spawn(shared.clone());
+    openrgb::spawn(shared.clone());
     if open_window {
         open_ui();
     }

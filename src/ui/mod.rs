@@ -339,6 +339,8 @@ impl HaloApp {
                 widgets::stepper(ui, "bottom", "Снизу", &mut l.bottom, 300);
                 widgets::toggle_row(ui, "reverse", "Обратное направление", &mut l.reverse);
                 widgets::toggle_row(ui, "autostart", "Запускать вместе с Windows", &mut self.config.autostart);
+                ui.add_space(6.0);
+                self.openrgb_section(ui);
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if widgets::pill_button(ui, "rescan", "Найти ленту заново").clicked() {
@@ -351,6 +353,31 @@ impl HaloApp {
                 });
             });
         });
+    }
+
+    /// Keyboard and other RGB through OpenRGB. Nothing is touched unless its own toggle is on.
+    fn openrgb_section(&mut self, ui: &mut Ui) {
+        paint::caption(ui, "Клавиатура и другой RGB");
+        widgets::toggle_row(ui, "orgb", "Синхронизировать через OpenRGB", &mut self.config.openrgb.enabled);
+        if !self.config.openrgb.enabled {
+            ui.label(
+                RichText::new("Halo покрасит только отмеченные устройства. Остальные останутся как есть.")
+                    .size(12.5)
+                    .color(TEXT3),
+            );
+            return;
+        }
+        if !self.status.openrgb_note.is_empty() {
+            ui.label(RichText::new(&self.status.openrgb_note).size(12.5).color(paint::WARN));
+        }
+        let names = self.status.openrgb.clone();
+        for name in names.iter().filter(|n| !n.to_lowercase().contains("skydimo")) {
+            let mut on = self.config.openrgb.devices.contains(name);
+            if widgets::toggle_row(ui, ("orgb-dev", name.as_str()), name, &mut on) {
+                let others = self.config.openrgb.devices.iter().filter(|d| *d != name).cloned();
+                self.config.openrgb.devices = if on { others.chain([name.clone()]).collect() } else { others.collect() };
+            }
+        }
     }
 
     fn offline_card(&mut self, ui: &mut Ui) {

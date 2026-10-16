@@ -10,6 +10,7 @@ mod engine;
 mod ipc;
 mod letterbox;
 mod log;
+mod openrgb;
 mod proto;
 mod ui;
 

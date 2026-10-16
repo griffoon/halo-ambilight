@@ -27,6 +27,9 @@ pub struct Status {
     pub note: String,
     pub monitors: Vec<MonitorInfo>,
     pub capture_error: Option<String>,
+    /// Device names reported by OpenRGB, when sync is on and the server answers.
+    pub openrgb: Vec<String>,
+    pub openrgb_note: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
