@@ -4,12 +4,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
 
-namespace HaloSettings;
+namespace HaloSettings.Pages;
 
-public sealed partial class MainPage : Page
+public sealed partial class EffectsPage : HaloPage
 {
     private static readonly (string Name, Color Color)[] Presets =
     [
@@ -26,76 +27,35 @@ public sealed partial class MainPage : Page
     ];
 
     private readonly List<(Button Button, Color Color)> _swatches = [];
-    private bool _syncingMode;
 
-    public MainPage()
+    public EffectsPage()
     {
-        ViewModel = new MainViewModel(DispatcherQueue);
         InitializeComponent();
-        BuildSwatches();
-
-        ViewModel.LedsUpdated += leds => Preview.SetColors(leds);
-        ViewModel.PropertyChanged += OnViewModelChanged;
-        Loaded += (_, _) =>
-        {
-            Preview.SetLayout(ViewModel.Layout);
-            SyncMode();
-            SyncCaption();
-        };
-        Unloaded += (_, _) => ViewModel.Shutdown();
     }
 
-    public MainViewModel ViewModel { get; }
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        if (_swatches.Count == 0)
+        {
+            BuildSwatches();
+        }
+        ViewModel.PropertyChanged += OnViewModelChanged;
+        SyncSwatches();
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        ViewModel.PropertyChanged -= OnViewModelChanged;
+        base.OnNavigatedFrom(e);
+    }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
+        if (e.PropertyName == nameof(MainViewModel.Color))
         {
-            case nameof(MainViewModel.Layout):
-                Preview.SetLayout(ViewModel.Layout);
-                break;
-            case nameof(MainViewModel.ModeIndex):
-                SyncMode();
-                SyncCaption();
-                break;
-            case nameof(MainViewModel.Enabled):
-            case nameof(MainViewModel.MonitorIndex):
-                SyncCaption();
-                break;
-            case nameof(MainViewModel.Color):
-                SyncSwatches();
-                break;
+            SyncSwatches();
         }
-    }
-
-    private void OnModeSelected(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
-    {
-        if (_syncingMode || sender.SelectedItem is null)
-        {
-            return;
-        }
-        ViewModel.ModeIndex = sender.Items.IndexOf(sender.SelectedItem);
-    }
-
-    private void SyncMode()
-    {
-        var index = Math.Clamp(ViewModel.ModeIndex, 0, ModeBar.Items.Count - 1);
-        if (ModeBar.SelectedItem == ModeBar.Items[index])
-        {
-            return;
-        }
-        _syncingMode = true;
-        ModeBar.SelectedItem = ModeBar.Items[index];
-        _syncingMode = false;
-    }
-
-    private void SyncCaption()
-    {
-        Preview.Caption = !ViewModel.Enabled
-            ? "Подсветка выключена"
-            : ViewModel.IsScreen && ViewModel.MonitorIndex >= 0 && ViewModel.MonitorIndex < ViewModel.Monitors.Count
-                ? ViewModel.Monitors[ViewModel.MonitorIndex]
-                : ((SelectorBarItem)ModeBar.Items[Math.Clamp(ViewModel.ModeIndex, 0, ModeBar.Items.Count - 1)]).Text;
     }
 
     private void BuildSwatches()
@@ -120,7 +80,6 @@ public sealed partial class MainPage : Page
         custom.Flyout = new Flyout { Content = picker };
         custom.Click += (_, _) => picker.Color = ViewModel.Color;
         Swatches.Children.Add(custom);
-        SyncSwatches();
     }
 
     private static Button SwatchButton(UIElement content, string name)

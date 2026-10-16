@@ -31,7 +31,7 @@ public partial class App : Application
         }
     }
 
-    public static Window Window { get; private set; } = null!;
+    public static MainWindow MainWindow { get; private set; } = null!;
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -44,8 +44,8 @@ public partial class App : Application
         }
         try
         {
-            Window = new MainWindow();
-            Window.Activate();
+            MainWindow = new MainWindow();
+            MainWindow.Activate();
         }
         catch (Exception e)
         {

@@ -22,7 +22,7 @@ const LANG_NEUTRAL: u16 = 0;
 /// which the default v5 comctl32 only exports by ordinal.
 const MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity type="win32" name="Halo" version="0.5.0.0"/>
+  <assemblyIdentity type="win32" name="Halo" version="0.6.0.0"/>
   <dependency>
     <dependentAssembly>
       <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0"

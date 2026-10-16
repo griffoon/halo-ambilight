@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:HaloPage
+    x:Class="HaloSettings.Pages.StripPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HaloSettings.Controls"
+    xmlns:local="using:HaloSettings.Pages"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Style="{StaticResource PageContentStyle}">
+            <TextBlock Style="{StaticResource PageTitleStyle}" Text="Лента" />
+
+            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Подключение" />
+            <StackPanel controls:CardGroup.IsGroup="True">
+                <toolkit:SettingsCard Description="{x:Bind ViewModel.DeviceDetail, Mode=OneWay}" Header="{x:Bind ViewModel.DeviceTitle, Mode=OneWay}">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE88E;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard
+                    Command="{x:Bind ViewModel.RescanCommand}"
+                    Description="Если ленту переподключили в другой порт"
+                    Header="Найти ленту заново"
+                    IsClickEnabled="True">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE895;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                </toolkit:SettingsCard>
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Разметка" />
+            <StackPanel controls:CardGroup.IsGroup="True">
+                <toolkit:SettingsCard Description="Снизу вверх" Header="Слева">
+                    <NumberBox Maximum="300" Minimum="0" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.Left, Mode=TwoWay}" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Description="Слева направо" Header="Сверху">
+                    <NumberBox Maximum="300" Minimum="0" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.Top, Mode=TwoWay}" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Description="Сверху вниз" Header="Справа">
+                    <NumberBox Maximum="300" Minimum="0" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.Right, Mode=TwoWay}" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Description="Справа налево" Header="Снизу">
+                    <NumberBox Maximum="300" Minimum="0" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.Bottom, Mode=TwoWay}" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Description="Если лента начинается справа снизу" Header="Обратное направление">
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.Reverse, Mode=TwoWay}" />
+                </toolkit:SettingsCard>
+            </StackPanel>
+            <TextBlock
+                Margin="1,8,0,0"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind ViewModel.LedCount, Mode=OneWay}" />
+        </StackPanel>
+    </ScrollViewer>
+</local:HaloPage>

@@ -193,9 +193,9 @@ impl Tray {
         }
         let status = shared.status();
         let tip = match &status.device {
-            Some(d) => format!("Halo · {} · {}", d.model, d.port),
+            Some(d) => format!("Halo: {} на {}", d.model, d.port),
             None if status.note.is_empty() => "Halo".to_string(),
-            None => format!("Halo · {}", status.note),
+            None => format!("Halo: {}", status.note),
         };
         let _ = self.icon.set_tooltip(Some(tip));
     }

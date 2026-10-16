@@ -126,9 +126,11 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _autostart;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OpenRgbNoteOpen))]
     private bool _openRgbEnabled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OpenRgbNoteOpen))]
     private string _openRgbNote = "";
 
     [ObservableProperty]
@@ -146,6 +148,7 @@ public sealed partial class MainViewModel : ObservableObject
     public bool HasSpeed => ModeIndex is 2 or 3 or 4;
     public bool ProblemOpen => IsOnline && Problem.Length > 0;
     public bool OfflineOpen => !IsOnline;
+    public bool OpenRgbNoteOpen => OpenRgbEnabled && OpenRgbNote.Length > 0;
 
     public string ModeHint => ModeIndex switch
     {
@@ -268,7 +271,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (s["device"] is JsonObject d)
         {
             DeviceTitle = $"Skydimo {Text(d["model"])}";
-            DeviceDetail = $"{Text(d["port"])} · {LedCount}";
+            DeviceDetail = $"{Text(d["port"])}, {LedCount}";
         }
         else
         {
@@ -288,8 +291,8 @@ public sealed partial class MainViewModel : ObservableObject
             Monitors.Clear();
             foreach (var m in monitors)
             {
-                var primary = Flag(m["primary"], false) ? " · основной" : "";
-                Monitors.Add($"Монитор {Num(m["index"], 0) + 1} · {Num(m["width"], 0)}×{Num(m["height"], 0)}{primary}");
+                var primary = Flag(m["primary"], false) ? ", основной" : "";
+                Monitors.Add($"Монитор {Num(m["index"], 0) + 1}, {Num(m["width"], 0)}×{Num(m["height"], 0)}{primary}");
             }
             var current = (int)Num((_config["screen"] as JsonObject)?["monitor"], 0);
             MonitorIndex = Math.Max(0, _monitorIds.IndexOf(current));

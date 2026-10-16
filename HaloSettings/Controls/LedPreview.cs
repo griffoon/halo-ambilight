@@ -9,27 +9,27 @@ using Windows.UI;
 namespace HaloSettings.Controls;
 
 /// <summary>
-/// A monitor drawn at the centre with the strip's live colours glowing around its edges.
-/// The screen itself is always dark — it is a picture of a monitor, not app chrome.
+/// A monitor drawn at the centre with the strip's live colours as a soft blur around it.
+/// Each LED is a wide radial glow; neighbours overlap into one continuous halo.
+/// The screen itself is always dark: it is a picture of a monitor, not app chrome.
 /// </summary>
 public sealed partial class LedPreview : Grid
 {
     private const double ScreenWidth = 236;
     private const double ScreenHeight = 134;
-    private const double GlowSize = 70;
-    private const double GlowOffset = 12;
-    private const byte GlowAlpha = 150;
+    private const double ScreenLift = 22;
+    private const double GlowSize = 120;
+    private const double GlowOffset = 20;
+    private const byte GlowAlpha = 110;
 
     private readonly Canvas _glow = new() { IsHitTestVisible = false };
-    private readonly Canvas _chips = new() { IsHitTestVisible = false };
-    private readonly Border _screen;
     private readonly TextBlock _caption;
-    private readonly List<(Ellipse Glow, GradientStop Inner, GradientStop Outer, Ellipse Chip, SolidColorBrush ChipBrush)> _leds = [];
+    private readonly List<(Ellipse Glow, GradientStop Inner, GradientStop Outer)> _leds = [];
     private IReadOnlyList<Slot> _slots = [];
 
     public LedPreview()
     {
-        Height = 210;
+        Height = 220;
         _caption = new TextBlock
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -37,7 +37,7 @@ public sealed partial class LedPreview : Grid
             Foreground = new SolidColorBrush(Color.FromArgb(150, 255, 255, 255)),
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
         };
-        _screen = new Border
+        var screen = new Border
         {
             Width = ScreenWidth,
             Height = ScreenHeight,
@@ -57,7 +57,7 @@ public sealed partial class LedPreview : Grid
             Child = _caption,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 22),
+            Margin = new Thickness(0, 0, 0, ScreenLift),
         };
         var stand = new StackPanel
         {
@@ -74,8 +74,7 @@ public sealed partial class LedPreview : Grid
 
         Children.Add(_glow);
         Children.Add(stand);
-        Children.Add(_screen);
-        Children.Add(_chips);
+        Children.Add(screen);
         SizeChanged += (_, _) => Arrange();
     }
 
@@ -96,23 +95,19 @@ public sealed partial class LedPreview : Grid
         }
         _slots = slots;
         _glow.Children.Clear();
-        _chips.Children.Clear();
         _leds.Clear();
         foreach (var _ in _slots)
         {
-            var inner = new GradientStop { Offset = 0, Color = Colors(0, 0, 0, 0) };
-            var outer = new GradientStop { Offset = 1, Color = Colors(0, 0, 0, 0) };
+            var inner = new GradientStop { Offset = 0, Color = Color.FromArgb(0, 0, 0, 0) };
+            var outer = new GradientStop { Offset = 1, Color = Color.FromArgb(0, 0, 0, 0) };
             var glow = new Ellipse
             {
                 Width = GlowSize,
                 Height = GlowSize,
                 Fill = new RadialGradientBrush { GradientStops = { inner, outer } },
             };
-            var chipBrush = new SolidColorBrush(Colors(255, 0, 0, 0));
-            var chip = new Ellipse { Width = 4, Height = 4, Fill = chipBrush };
             _glow.Children.Add(glow);
-            _chips.Children.Add(chip);
-            _leds.Add((glow, inner, outer, chip, chipBrush));
+            _leds.Add((glow, inner, outer));
         }
         Arrange();
     }
@@ -123,16 +118,13 @@ public sealed partial class LedPreview : Grid
         for (var i = 0; i < _leds.Count && i * 3 + 2 < rgb.Length; i++)
         {
             byte r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
+            // Light, not paint: a dark LED glows less and an unlit one not at all, never a black smudge.
+            var alpha = (byte)(GlowAlpha * Math.Max(r, Math.Max(g, b)) / 255);
             var led = _leds[i];
-            // Light, not paint: a dark LED should glow less, never cast a black smudge.
-            var glow = (byte)(GlowAlpha * Math.Max(r, Math.Max(g, b)) / 255);
-            led.Inner.Color = Colors(glow, r, g, b);
-            led.Outer.Color = Colors(0, r, g, b);
-            led.ChipBrush.Color = Colors(255, r, g, b);
+            led.Inner.Color = Color.FromArgb(alpha, r, g, b);
+            led.Outer.Color = Color.FromArgb(0, r, g, b);
         }
     }
-
-    private static Color Colors(byte a, byte r, byte g, byte b) => Color.FromArgb(a, r, g, b);
 
     private void Arrange()
     {
@@ -140,9 +132,9 @@ public sealed partial class LedPreview : Grid
         {
             return;
         }
-        // Mirrors the layout of _screen: centred, lifted by half its bottom margin.
+        // Mirrors the screen's placement: centred, lifted by its bottom margin.
         var left = (ActualWidth - ScreenWidth) / 2;
-        var top = (ActualHeight - ScreenHeight - 22) / 2;
+        var top = (ActualHeight - ScreenHeight - ScreenLift) / 2;
         for (var i = 0; i < _leds.Count && i < _slots.Count; i++)
         {
             var slot = _slots[i];
@@ -154,13 +146,9 @@ public sealed partial class LedPreview : Grid
                 Side.Right => (1.0, 0.0),
                 _ => (0.0, 1.0),
             };
-            var x = left + cx * ScreenWidth;
-            var y = top + cy * ScreenHeight;
-            var led = _leds[i];
-            Canvas.SetLeft(led.Glow, x + nx * GlowOffset - GlowSize / 2);
-            Canvas.SetTop(led.Glow, y + ny * GlowOffset - GlowSize / 2);
-            Canvas.SetLeft(led.Chip, x + nx * 3.5 - 2);
-            Canvas.SetTop(led.Chip, y + ny * 3.5 - 2);
+            var glow = _leds[i].Glow;
+            Canvas.SetLeft(glow, left + cx * ScreenWidth + nx * GlowOffset - GlowSize / 2);
+            Canvas.SetTop(glow, top + cy * ScreenHeight + ny * GlowOffset - GlowSize / 2);
         }
     }
 }

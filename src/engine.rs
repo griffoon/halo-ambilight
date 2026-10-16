@@ -14,10 +14,12 @@ use std::time::{Duration, Instant};
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(3);
 const CAPTURE_RETRY: Duration = Duration::from_millis(1500);
-const KEEPALIVE: Duration = Duration::from_secs(1);
+/// The strip blanks itself when frames stop for a while, so even a static colour is streamed
+/// steadily — the same 33 ms cadence SkyDimo used (`devUpdateInterval`).
+const KEEPALIVE: Duration = Duration::from_millis(33);
 const SAVE_DELAY: Duration = Duration::from_millis(800);
 const EFFECT_FPS: f32 = 40.0;
-const IDLE_TICK: Duration = Duration::from_millis(250);
+const IDLE_TICK: Duration = KEEPALIVE;
 const FADE_SECONDS: f32 = 0.35;
 
 type Waker = Box<dyn Fn() + Send>;

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:HaloPage
+    x:Class="HaloSettings.Pages.SystemPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HaloSettings.Controls"
+    xmlns:local="using:HaloSettings.Pages"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Style="{StaticResource PageContentStyle}">
+            <TextBlock Style="{StaticResource PageTitleStyle}" Text="Параметры" />
+
+            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Запуск" />
+            <StackPanel controls:CardGroup.IsGroup="True">
+                <toolkit:SettingsCard Description="Halo стартует в трее без окна" Header="Запускать вместе с Windows">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE7E8;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.Autostart, Mode=TwoWay}" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Description="Лента погаснет, значок в трее исчезнет" Header="Выключить Halo">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE711;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                    <Button Command="{x:Bind ViewModel.QuitServiceCommand}" Content="Выключить" />
+                </toolkit:SettingsCard>
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="О программе" />
+            <StackPanel controls:CardGroup.IsGroup="True">
+                <toolkit:SettingsCard Description="Подсветка за монитором для лент Skydimo" Header="{x:Bind Version, Mode=OneTime}">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                </toolkit:SettingsCard>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</local:HaloPage>
