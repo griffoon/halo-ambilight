@@ -8,6 +8,7 @@ mod device;
 mod effects;
 mod engine;
 mod ipc;
+mod letterbox;
 mod log;
 mod proto;
 mod ui;

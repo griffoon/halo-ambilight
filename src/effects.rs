@@ -120,18 +120,22 @@ pub fn render(cfg: &Config, t: f32, out: &mut [Rgb]) {
 /// Pixel rectangles of each LED inside the downsampled frame.
 #[derive(Default)]
 pub struct Zones {
-    key: Option<(u32, u32, u32, Layout)>,
+    key: Option<([u32; 4], u32, Layout)>,
     rects: Vec<[u32; 4]>,
 }
 
 impl Zones {
-    pub fn ensure(&mut self, w: u32, h: u32, layout: &Layout, depth: f32) {
+    /// `area` is the visible picture `[x0, y0, x1, y1]` inside the frame (smaller than the frame
+    /// when black bars are cropped away).
+    pub fn ensure(&mut self, area: [u32; 4], layout: &Layout, depth: f32) {
         let depth_key = (depth * 1000.0) as u32;
-        let key = Some((w, h, depth_key, *layout));
+        let key = Some((area, depth_key, *layout));
         if self.key == key {
             return;
         }
         self.key = key;
+        let [ax, ay, ax1, ay1] = area;
+        let (w, h) = ((ax1 - ax).max(1), (ay1 - ay).max(1));
         let d = ((depth * h as f32).round() as u32).clamp(1, (w.min(h) / 2).max(1));
         let span = |a: f32, b: f32, len: u32| {
             let lo = ((a * len as f32).floor() as u32).min(len - 1);
@@ -158,6 +162,7 @@ impl Zones {
                     [x0, h - d, x1, h]
                 }
             })
+            .map(|[x0, y0, x1, y1]| [x0 + ax, y0 + ay, x1 + ax, y1 + ay])
             .collect();
     }
 
@@ -208,7 +213,7 @@ mod tests {
         let frame: Vec<u8> = (0..w * h).flat_map(|_| [0u8, 128, 255, 255]).collect();
         let layout = Layout::default();
         let mut zones = Zones::default();
-        zones.ensure(w, h, &layout, 0.2);
+        zones.ensure([0, 0, w, h], &layout, 0.2);
         let mut out = vec![[0.0; 3]; layout.total()];
         zones.sample(&frame, w, &mut out);
         assert!(out.iter().all(|c| (c[0] - 1.0).abs() < 1e-3 && c[2].abs() < 1e-3));

@@ -293,6 +293,7 @@ impl HaloApp {
         if widgets::segmented(ui, "fps", &labels, &mut fps_i, 34.0) {
             s.fps = if fps_i == 1 { 60 } else { 30 };
         }
+        widgets::toggle_row(ui, "letterbox", "Убирать чёрные полосы", &mut s.letterbox);
         if let Some(err) = &self.status.capture_error {
             ui.label(RichText::new(err).size(12.5).color(paint::WARN));
         }

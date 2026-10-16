@@ -4,6 +4,7 @@ use crate::capture::{self, Capturer};
 use crate::config::{Config, Mode};
 use crate::device::{self, Device};
 use crate::effects::{self, Rgb, Zones};
+use crate::letterbox;
 use crate::log;
 use crate::proto::Status;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -182,6 +183,7 @@ struct Screen {
     capturer: Option<(u32, Capturer)>,
     retry_at: Instant,
     zones: Zones,
+    bars: letterbox::Tracker,
 }
 
 impl Screen {
@@ -213,7 +215,8 @@ impl Screen {
             return false;
         }
         let Some((pixels, w, h)) = cap.frame() else { return false };
-        self.zones.ensure(w, h, &cfg.layout, cfg.screen.depth);
+        let area = if cfg.screen.letterbox { self.bars.update(pixels, w, h) } else { [0, 0, w, h] };
+        self.zones.ensure(area, &cfg.layout, cfg.screen.depth);
         self.zones.sample(pixels, w, target);
         let sat = cfg.screen.saturation;
         target.iter_mut().for_each(|c| *c = effects::saturate(*c, sat));
@@ -233,7 +236,7 @@ fn run(shared: &Shared) {
     shared.update_status(|s| Status { monitors: capture::list_monitors(), ..s.clone() });
 
     let mut link = Link { device: None, next_probe: Instant::now(), last_sent: Vec::new(), last_send_at: Instant::now() };
-    let mut screen = Screen { capturer: None, retry_at: Instant::now(), zones: Zones::default() };
+    let mut screen = Screen { capturer: None, retry_at: Instant::now(), zones: Zones::default(), bars: letterbox::Tracker::default() };
     let mut target: Vec<Rgb> = Vec::new();
     let mut current: Vec<Rgb> = Vec::new();
     let mut frame: Vec<[u8; 3]> = Vec::new();
