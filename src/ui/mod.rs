@@ -9,9 +9,10 @@ use crate::config::{Config, Mode};
 use crate::daemon::WINDOW_TITLE;
 use crate::effects;
 use crate::proto::{Status, ToDaemon, ToUi};
-use egui::{pos2, vec2, Align2, Color32, FontData, FontDefinitions, FontFamily, FontId, Id, Rect, RichText, Sense, Ui, ViewportCommand};
+use egui::{pos2, vec2, Align2, Color32, FontData, FontDefinitions, FontFamily, Id, Rect, Sense, Ui, ViewportCommand};
+use paint::{rich, BODY, FOOT, HEADLINE, SUB};
 use link::Link;
-use paint::{TEXT, TEXT2, TEXT3};
+use paint::TEXT;
 use std::sync::Arc;
 use widgets::Glyph;
 use windows::core::{w, PCWSTR};
@@ -23,7 +24,11 @@ use windows::Win32::Graphics::Dwm::{
 };
 use windows::Win32::System::Threading::CreateMutexW;
 use windows::Win32::UI::Controls::MARGINS;
-use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{
+    FindWindowW, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, WS_SYSMENU,
+};
 
 /// Ignore echoes from the service for this long after a local edit, so drags never jump back.
 const ECHO_GUARD: f64 = 1.0;
@@ -88,28 +93,35 @@ fn apply_backdrop() -> bool {
         let _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, (&corner as *const DWM_WINDOW_CORNER_PREFERENCE).cast(), 4);
         let margins = MARGINS { cxLeftWidth: -1, cxRightWidth: -1, cyTopHeight: -1, cyBottomHeight: -1 };
         let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
+        // Extending the frame makes DWM draw its own caption buttons; dropping the system menu
+        // hides them, leaving only ours.
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_SYSMENU.0 as isize));
+        let _ = SetWindowPos(hwnd, HWND::default(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         let backdrop = DWMSBT_TRANSIENTWINDOW;
         DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, (&backdrop as *const DWM_SYSTEMBACKDROP_TYPE).cast(), 4).is_ok()
     }
 }
 
+/// Inter (SIL OFL), embedded: Regular, Medium and SemiBold for text, the Display cut for titles.
 fn install_fonts(ctx: &egui::Context) {
+    const FACES: [(&str, &[u8]); 4] = [
+        ("inter", include_bytes!("../../assets/fonts/Inter-Regular.ttf")),
+        ("inter-medium", include_bytes!("../../assets/fonts/Inter-Medium.ttf")),
+        ("inter-semibold", include_bytes!("../../assets/fonts/Inter-SemiBold.ttf")),
+        ("inter-display", include_bytes!("../../assets/fonts/InterDisplay-SemiBold.ttf")),
+    ];
     let mut fonts = FontDefinitions::default();
-    let dir = std::path::PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into())).join("Fonts");
-    let load = |names: &[&str]| names.iter().find_map(|n| std::fs::read(dir.join(n)).ok());
-    let mut sb_family = Vec::new();
-    if let Some(bytes) = load(&["segoeui.ttf"]) {
-        fonts.font_data.insert("ui".into(), FontData::from_owned(bytes));
-        if let Some(list) = fonts.families.get_mut(&FontFamily::Proportional) {
-            list.insert(0, "ui".into());
-        }
+    for (name, bytes) in FACES {
+        fonts.font_data.insert(name.into(), FontData::from_static(bytes));
     }
-    if let Some(bytes) = load(&["seguisb.ttf", "segoeuib.ttf"]) {
-        fonts.font_data.insert("ui_sb".into(), FontData::from_owned(bytes));
-        sb_family.push("ui_sb".to_string());
-    }
-    sb_family.extend(fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default());
-    fonts.families.insert(paint::semibold(), sb_family);
+    // egui's bundled fonts stay as fallbacks for symbols Inter lacks.
+    let fallbacks = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    let family = |primary: &str| std::iter::once(primary.to_string()).chain(fallbacks.iter().cloned()).collect::<Vec<_>>();
+    fonts.families.insert(FontFamily::Proportional, family("inter"));
+    fonts.families.insert(paint::Face::Medium.family(), family("inter-medium"));
+    fonts.families.insert(paint::Face::Semibold.family(), family("inter-semibold"));
+    fonts.families.insert(paint::Face::Display.family(), family("inter-display"));
     ctx.set_fonts(fonts);
 }
 
@@ -186,7 +198,7 @@ impl HaloApp {
     fn absorb(&mut self, now: f64) {
         for msg in self.link.drain() {
             match msg {
-                ToUi::State { config, status } => {
+                ToUi::State { config, status, .. } => {
                     if now - self.last_edit > ECHO_GUARD {
                         self.config = config;
                     }
@@ -217,11 +229,15 @@ impl HaloApp {
         let p = ui.painter();
         let logo_c = pos2(rect.left() + 18.0, rect.center().y);
         paint::logo(p, logo_c, 11.0);
-        let title = paint::galley(ui, "Halo", 21.0, paint::semibold(), TEXT, -0.4);
-        p.galley(pos2(rect.left() + 42.0, rect.center().y - 22.0), title, TEXT);
+        // Title and status form one left-aligned block, centred on the logo.
+        let x = rect.left() + 42.0;
+        let title_h = p.layout_job(paint::job("Halo", paint::TITLE)).size().y;
+        let status_h = p.layout_job(paint::job("Hg", paint::STATUS)).size().y;
+        let top = rect.center().y - (title_h + status_h) * 0.5;
+        paint::text(p, pos2(x, top), Align2::LEFT_TOP, "Halo", paint::TITLE);
         let (dot, line) = self.status_line();
-        p.circle_filled(pos2(rect.left() + 46.0, rect.center().y + 10.0), 3.5, dot);
-        p.text(pos2(rect.left() + 55.0, rect.center().y + 10.0), Align2::LEFT_CENTER, line, FontId::proportional(12.5), TEXT2);
+        let status = paint::text(p, pos2(x + 11.0, top + title_h), Align2::LEFT_TOP, &line, paint::STATUS);
+        p.circle_filled(pos2(x + 3.5, status.center().y), 3.0, dot);
 
         let close_rect = Rect::from_center_size(pos2(rect.right() - 15.0, rect.center().y), vec2(30.0, 30.0));
         let min_rect = close_rect.translate(vec2(-38.0, 0.0));
@@ -241,9 +257,9 @@ impl HaloApp {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.label(RichText::new("Подсветка").size(17.0).family(paint::semibold()).color(TEXT));
+                    ui.label(rich("Подсветка", HEADLINE));
                     let sub = if self.config.enabled { "Включена".to_string() } else { "Выключена".to_string() };
-                    ui.label(RichText::new(sub).size(13.0).color(TEXT2));
+                    ui.label(rich(sub, SUB));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     widgets::toggle(ui, "power", &mut self.config.enabled);
@@ -274,7 +290,7 @@ impl HaloApp {
     }
 
     fn screen_settings(&mut self, ui: &mut Ui) {
-        paint::caption(ui, "Синхронизация с экраном");
+        paint::section(ui, "Синхронизация с экраном");
         let monitors = self.status.monitors.clone();
         if monitors.len() > 1 {
             let labels: Vec<String> = monitors.iter().map(|m| format!("{} · {}×{}", m.index + 1, m.width, m.height)).collect();
@@ -295,12 +311,12 @@ impl HaloApp {
         }
         widgets::toggle_row(ui, "letterbox", "Убирать чёрные полосы", &mut s.letterbox);
         if let Some(err) = &self.status.capture_error {
-            ui.label(RichText::new(err).size(12.5).color(paint::WARN));
+            ui.label(rich(err, SUB.color(paint::WARN)));
         }
     }
 
     fn color_settings(&mut self, ui: &mut Ui, breathing: bool) {
-        paint::caption(ui, if breathing { "Дыхание" } else { "Цвет" });
+        paint::section(ui, if breathing { "Дыхание" } else { "Цвет" });
         if widgets::swatches(ui, "presets", &PRESETS, &mut self.config.color) {
             self.hue = rgb_to_hs(self.config.color).0;
         }
@@ -317,8 +333,8 @@ impl HaloApp {
     }
 
     fn speed_settings(&mut self, ui: &mut Ui, hint: &str) {
-        paint::caption(ui, self.config.mode.label());
-        ui.label(RichText::new(hint).size(13.0).color(TEXT2));
+        paint::section(ui, self.config.mode.label());
+        ui.label(rich(hint, SUB));
         widgets::slider(ui, "speed", "Скорость", &mut self.config.speed, 0.1..=4.0, |v| format!("{v:.1}×"));
     }
 
@@ -331,7 +347,12 @@ impl HaloApp {
             ui.scope(|ui| {
                 ui.set_opacity(openness);
                 ui.add_space(4.0);
-                paint::caption(ui, &format!("Разметка · {}", plural_leds(self.config.layout.total())));
+                ui.horizontal(|ui| {
+                    paint::section(ui, "Разметка");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(rich(plural_leds(self.config.layout.total()), SUB));
+                    });
+                });
                 let l = &mut self.config.layout;
                 widgets::stepper(ui, "left", "Слева", &mut l.left, 300);
                 widgets::stepper(ui, "top", "Сверху", &mut l.top, 300);
@@ -357,18 +378,16 @@ impl HaloApp {
 
     /// Keyboard and other RGB through OpenRGB. Nothing is touched unless its own toggle is on.
     fn openrgb_section(&mut self, ui: &mut Ui) {
-        paint::caption(ui, "Клавиатура и другой RGB");
+        paint::section(ui, "Клавиатура и другой RGB");
         widgets::toggle_row(ui, "orgb", "Синхронизировать через OpenRGB", &mut self.config.openrgb.enabled);
         if !self.config.openrgb.enabled {
             ui.label(
-                RichText::new("Halo покрасит только отмеченные устройства. Остальные останутся как есть.")
-                    .size(12.5)
-                    .color(TEXT3),
+                rich("Halo покрасит только отмеченные устройства. Остальные останутся как есть.", SUB),
             );
             return;
         }
         if !self.status.openrgb_note.is_empty() {
-            ui.label(RichText::new(&self.status.openrgb_note).size(12.5).color(paint::WARN));
+            ui.label(rich(&self.status.openrgb_note, SUB.color(paint::WARN)));
         }
         let names = self.status.openrgb.clone();
         for name in names.iter().filter(|n| !n.to_lowercase().contains("skydimo")) {
@@ -382,8 +401,8 @@ impl HaloApp {
 
     fn offline_card(&mut self, ui: &mut Ui) {
         paint::card(ui, |ui| {
-            ui.label(RichText::new("Фоновая служба Halo не запущена").size(14.0).color(TEXT));
-            ui.label(RichText::new("Без неё лента не получает цвета.").size(13.0).color(TEXT2));
+            ui.label(rich("Фоновая служба Halo не запущена", BODY));
+            ui.label(rich("Без неё лента не получает цвета.", SUB));
             ui.add_space(4.0);
             if widgets::pill_button(ui, "start", "Запустить").clicked() {
                 if let Ok(exe) = std::env::current_exe() {
@@ -396,7 +415,7 @@ impl HaloApp {
     fn footer(&self, ui: &mut Ui) {
         ui.add_space(2.0);
         ui.vertical_centered(|ui| {
-            ui.label(RichText::new("Ctrl Shift Alt  ·  ↑ ↓ яркость  ·  ← → режим  ·  F10 вкл/выкл").size(11.5).color(TEXT3));
+            ui.label(rich("Ctrl Shift Alt  ·  ↑ ↓ яркость  ·  ← → режим  ·  F10 вкл/выкл", FOOT));
         });
         ui.add_space(14.0);
     }

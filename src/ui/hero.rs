@@ -1,10 +1,10 @@
 //! Live preview: a monitor with the strip's real colours glowing around it,
 //! and the window backdrop tinted by the same light.
 
-use super::paint::{self, TEXT2, TEXT3};
+use super::paint;
 use crate::config::Layout;
 use crate::effects::{self, Side, Slot};
-use egui::{pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Rounding, Sense, Stroke, Ui, Vec2};
+use egui::{pos2, vec2, Align2, Color32, Painter, Pos2, Rect, Rounding, Sense, Stroke, Ui, Vec2};
 
 const FALLBACK: [u8; 3] = [120, 96, 255];
 
@@ -45,7 +45,7 @@ pub fn hero(ui: &mut Ui, leds: &[[u8; 3]], layout: &Layout, caption: &str) {
         [pos2(screen.left() + 14.0, screen.top() + 1.0), pos2(screen.right() - 14.0, screen.top() + 1.0)],
         Stroke::new(1.0_f32, Color32::from_white_alpha(60)),
     );
-    p.text(screen.center(), Align2::CENTER_CENTER, caption, FontId::proportional(13.0), TEXT2);
+    paint::text(p, screen.center(), Align2::CENTER_CENTER, caption, paint::SUB);
 
     // LED chips sit on the bezel.
     for (slot, c) in slots.iter().zip(leds) {
@@ -53,7 +53,7 @@ pub fn hero(ui: &mut Ui, leds: &[[u8; 3]], layout: &Layout, caption: &str) {
         p.circle_filled(pos + n * 3.5, 2.1, paint::rgb(*c));
     }
     if leds.is_empty() {
-        p.text(pos2(screen.center().x, screen.bottom() + 44.0), Align2::CENTER_CENTER, "нет данных от ленты", FontId::proportional(11.5), TEXT3);
+        paint::text(p, pos2(screen.center().x, screen.bottom() + 44.0), Align2::CENTER_CENTER, "Нет данных от ленты", paint::FOOT);
     }
 }
 

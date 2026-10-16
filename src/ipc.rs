@@ -2,12 +2,13 @@
 //! The port and a per-run token live in %APPDATA%\Halo\ipc.json.
 
 use crate::engine::Shared;
+use crate::daemon::VERSION;
 use crate::log;
 use crate::proto::{endpoint_path, Endpoint, ToDaemon, ToUi};
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::io::{self, BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -15,6 +16,7 @@ use std::time::Duration;
 
 const PUSH_INTERVAL: Duration = Duration::from_millis(33);
 const HELLO_TIMEOUT: Duration = Duration::from_secs(2);
+const CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub fn serve(shared: Arc<Shared>) -> io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -33,6 +35,44 @@ pub fn serve(shared: Arc<Shared>) -> io::Result<()> {
         }
     })?;
     Ok(())
+}
+
+fn write_line(stream: &mut TcpStream, msg: &ToDaemon) -> io::Result<()> {
+    let mut line = serde_json::to_string(msg)?;
+    line.push('\n');
+    stream.write_all(line.as_bytes())
+}
+
+/// Client side: connects to the running service and says hello.
+pub fn connect() -> io::Result<TcpStream> {
+    let endpoint: Endpoint = serde_json::from_str(&std::fs::read_to_string(endpoint_path())?)?;
+    let addr = SocketAddr::from(([127, 0, 0, 1], endpoint.port));
+    let mut stream = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)?;
+    stream.set_nodelay(true)?;
+    write_line(&mut stream, &ToDaemon::Hello { token: endpoint.token })?;
+    Ok(stream)
+}
+
+pub fn send_to_service(stream: &mut TcpStream, msg: &ToDaemon) -> io::Result<()> {
+    write_line(stream, msg)
+}
+
+/// Version of the service that is running now; empty for builds that predate the field.
+pub fn running_version() -> Option<String> {
+    let stream = connect().ok()?;
+    stream.set_read_timeout(Some(HELLO_TIMEOUT)).ok()?;
+    let mut line = String::new();
+    BufReader::new(stream).read_line(&mut line).ok()?;
+    match serde_json::from_str::<ToUi>(&line).ok()? {
+        ToUi::State { version, .. } => Some(version),
+        ToUi::Leds { .. } => None,
+    }
+}
+
+pub fn request_quit() {
+    if let Ok(mut stream) = connect() {
+        let _ = write_line(&mut stream, &ToDaemon::Quit);
+    }
 }
 
 fn random_token() -> String {
@@ -86,7 +126,7 @@ fn client(shared: &Arc<Shared>, mut stream: TcpStream, token: &str) -> io::Resul
     while alive.load(Ordering::SeqCst) && !shared.quit.load(Ordering::SeqCst) {
         let (c, s) = (shared.config_rev.load(Ordering::SeqCst), shared.status_rev.load(Ordering::SeqCst));
         if c != seen_cfg || s != seen_status {
-            send(&mut stream, &ToUi::State { config: shared.config(), status: shared.status() })?;
+            send(&mut stream, &ToUi::State { config: shared.config(), status: shared.status(), version: VERSION.into() })?;
             (seen_cfg, seen_status) = (c, s);
         }
         let l = shared.leds_rev.load(Ordering::SeqCst);

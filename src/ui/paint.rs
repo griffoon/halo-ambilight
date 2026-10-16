@@ -1,23 +1,105 @@
-//! Low-level drawing: gradients, glows and the glass material.
+//! Low-level drawing: the type scale, anti-aliased gradients, glows and the glass material.
 
 use egui::epaint::{Mesh, Shadow};
 use egui::text::{LayoutJob, TextFormat};
-use egui::{pos2, vec2, Color32, FontFamily, FontId, Galley, Painter, Pos2, Rect, Rounding, Shape, Stroke, Ui};
+use egui::{pos2, vec2, Align2, Color32, FontFamily, FontId, Painter, Pos2, Rect, RichText, Rounding, Shape, Stroke, Ui, Vec2};
 use std::f32::consts::{FRAC_PI_2, TAU};
-use std::sync::Arc;
 
-pub const TEXT: Color32 = Color32::from_rgba_premultiplied(242, 242, 247, 242);
-pub const TEXT2: Color32 = Color32::from_rgba_premultiplied(150, 150, 158, 158);
-pub const TEXT3: Color32 = Color32::from_rgba_premultiplied(96, 96, 104, 104);
+pub const TEXT: Color32 = Color32::from_rgba_premultiplied(244, 244, 248, 244);
+pub const TEXT2: Color32 = Color32::from_rgba_premultiplied(158, 158, 166, 166);
+pub const TEXT3: Color32 = Color32::from_rgba_premultiplied(104, 104, 112, 112);
 pub const ACCENT: Color32 = Color32::from_rgb(128, 116, 255);
 pub const ACCENT_HI: Color32 = Color32::from_rgb(168, 150, 255);
 pub const OK: Color32 = Color32::from_rgb(52, 211, 120);
 pub const WARN: Color32 = Color32::from_rgb(255, 184, 64);
 pub const BAD: Color32 = Color32::from_rgb(255, 86, 96);
 
-pub fn semibold() -> FontFamily {
-    FontFamily::Name("sb".into())
+// ---------------------------------------------------------------- type
+
+#[derive(Clone, Copy)]
+pub enum Face {
+    Regular,
+    Medium,
+    Semibold,
+    /// Display cut for large sizes: tighter spacing, finer details.
+    Display,
 }
+
+impl Face {
+    pub fn family(self) -> FontFamily {
+        match self {
+            Face::Regular => FontFamily::Proportional,
+            Face::Medium => FontFamily::Name("medium".into()),
+            Face::Semibold => FontFamily::Name("semibold".into()),
+            Face::Display => FontFamily::Name("display".into()),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Type {
+    pub size: f32,
+    pub face: Face,
+    pub color: Color32,
+}
+
+impl Type {
+    pub const fn color(self, color: Color32) -> Self {
+        Self { color, ..self }
+    }
+}
+
+pub const TITLE: Type = Type { size: 22.0, face: Face::Display, color: TEXT };
+pub const HEADLINE: Type = Type { size: 17.0, face: Face::Semibold, color: TEXT };
+pub const SECTION: Type = Type { size: 15.0, face: Face::Semibold, color: TEXT };
+pub const BODY: Type = Type { size: 14.0, face: Face::Regular, color: TEXT };
+pub const VALUE: Type = Type { size: 14.0, face: Face::Medium, color: TEXT2 };
+pub const CONTROL: Type = Type { size: 13.0, face: Face::Medium, color: TEXT };
+pub const SUB: Type = Type { size: 13.0, face: Face::Regular, color: TEXT2 };
+pub const STATUS: Type = Type { size: 12.0, face: Face::Medium, color: TEXT2 };
+pub const FOOT: Type = Type { size: 11.0, face: Face::Regular, color: TEXT3 };
+
+/// Size-specific tracking (Inter's dynamic metrics): tight for large text, slightly open for small.
+pub fn tracking(size: f32) -> f32 {
+    size * (-0.0223 + 0.185 * (-0.1745 * size).exp())
+}
+
+pub fn job(text: &str, t: Type) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    job.append(
+        text,
+        0.0,
+        TextFormat {
+            font_id: FontId::new(t.size, t.face.family()),
+            color: t.color,
+            extra_letter_spacing: tracking(t.size),
+            ..Default::default()
+        },
+    );
+    job
+}
+
+pub fn rich(text: impl Into<String>, t: Type) -> RichText {
+    RichText::new(text).size(t.size).family(t.face.family()).color(t.color).extra_letter_spacing(tracking(t.size))
+}
+
+/// Paints text anchored at `pos` and returns where it landed.
+pub fn text(p: &Painter, pos: Pos2, align: Align2, s: &str, t: Type) -> Rect {
+    let galley = p.layout_job(job(s, t));
+    let rect = align.anchor_size(pos, galley.size());
+    p.galley(rect.min, galley, t.color);
+    rect
+}
+
+pub fn text_width(ui: &Ui, s: &str, t: Type) -> f32 {
+    ui.fonts(|f| f.layout_job(job(s, t))).size().x
+}
+
+pub fn section(ui: &mut Ui, title: &str) {
+    ui.label(rich(title, SECTION));
+}
+
+// ---------------------------------------------------------------- colour
 
 pub fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
@@ -33,9 +115,11 @@ pub fn with_alpha(c: [u8; 3], a: u8) -> Color32 {
     Color32::from_rgba_unmultiplied(c[0], c[1], c[2], a)
 }
 
-/// Rounded-rectangle outline, clockwise in screen space.
+// ---------------------------------------------------------------- geometry
+
+/// Rounded-rectangle outline, clockwise in screen space, without duplicate points.
 pub fn rrect_path(rect: Rect, radius: f32) -> Vec<Pos2> {
-    const SEG: usize = 8;
+    const SEG: usize = 10;
     let r = radius.min(rect.width() * 0.5).min(rect.height() * 0.5).max(0.0);
     let corners = [
         (pos2(rect.right() - r, rect.bottom() - r), 0.0),
@@ -43,32 +127,97 @@ pub fn rrect_path(rect: Rect, radius: f32) -> Vec<Pos2> {
         (pos2(rect.left() + r, rect.top() + r), 2.0 * FRAC_PI_2),
         (pos2(rect.right() - r, rect.top() + r), 3.0 * FRAC_PI_2),
     ];
-    corners
-        .iter()
-        .flat_map(|(c, start)| {
-            (0..=SEG).map(move |i| {
-                let a = start + i as f32 / SEG as f32 * FRAC_PI_2;
-                pos2(c.x + r * a.cos(), c.y + r * a.sin())
-            })
-        })
-        .collect()
+    let mut pts: Vec<Pos2> = Vec::with_capacity(4 * (SEG + 1));
+    for (c, start) in corners {
+        for i in 0..=SEG {
+            let a = start + i as f32 / SEG as f32 * FRAC_PI_2;
+            let pt = pos2(c.x + r * a.cos(), c.y + r * a.sin());
+            if pts.last().map_or(true, |last| last.distance(pt) > 0.01) {
+                pts.push(pt);
+            }
+        }
+    }
+    if pts.len() > 1 && pts[0].distance(pts[pts.len() - 1]) <= 0.01 {
+        pts.pop();
+    }
+    pts
 }
 
-/// Vertical gradient inside a rounded rectangle (triangle fan, convex shape).
-pub fn fill_gradient(p: &Painter, rect: Rect, radius: f32, top: Color32, bottom: Color32) {
-    let pts = rrect_path(rect, radius);
-    let shade = |y: f32| lerp_color(top, bottom, (y - rect.top()) / rect.height().max(1.0));
+fn outward(a: Pos2, b: Pos2) -> Vec2 {
+    let d = b - a;
+    let len = d.length();
+    if len < 1e-4 {
+        Vec2::ZERO
+    } else {
+        vec2(d.y, -d.x) / len
+    }
+}
+
+fn feather(p: &Painter) -> f32 {
+    1.0 / p.ctx().pixels_per_point()
+}
+
+/// Anti-aliased convex fill: a fan plus a one-pixel feathered rim, the way egui feathers its own shapes.
+fn shaded_mesh(pts: &[Pos2], center: Pos2, feather: f32, shade: impl Fn(Pos2) -> Color32) -> Mesh {
+    let n = pts.len();
     let mut mesh = Mesh::default();
-    mesh.colored_vertex(rect.center(), shade(rect.center().y));
-    pts.iter().for_each(|pt| mesh.colored_vertex(*pt, shade(pt.y)));
-    let n = pts.len() as u32;
-    (0..n).for_each(|i| mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n));
+    mesh.colored_vertex(center, shade(center));
+    for i in 0..n {
+        let (prev, cur, next) = (pts[(i + n - 1) % n], pts[i], pts[(i + 1) % n]);
+        let sum = outward(prev, cur) + outward(cur, next);
+        let normal = if sum.length() < 1e-4 { Vec2::ZERO } else { sum.normalized() };
+        let c = shade(cur);
+        mesh.colored_vertex(cur - normal * feather * 0.5, c);
+        mesh.colored_vertex(cur + normal * feather * 0.5, Color32::TRANSPARENT);
+    }
+    for i in 0..n as u32 {
+        let j = (i + 1) % n as u32;
+        let (ii, io, ji, jo) = (1 + 2 * i, 2 + 2 * i, 1 + 2 * j, 2 + 2 * j);
+        mesh.add_triangle(0, ii, ji);
+        mesh.add_triangle(ii, io, jo);
+        mesh.add_triangle(ii, jo, ji);
+    }
+    mesh
+}
+
+fn gradient_mesh(rect: Rect, radius: f32, top: Color32, bottom: Color32, feather: f32) -> Mesh {
+    let pts = rrect_path(rect, radius);
+    let h = rect.height().max(1.0);
+    shaded_mesh(&pts, rect.center(), feather, |pt| lerp_color(top, bottom, (pt.y - rect.top()) / h))
+}
+
+/// Vertical gradient inside a rounded rectangle, with smooth edges.
+pub fn fill_gradient(p: &Painter, rect: Rect, radius: f32, top: Color32, bottom: Color32) {
+    p.add(Shape::mesh(gradient_mesh(rect, radius, top, bottom, feather(p))));
+}
+
+/// Horizontal strip whose colour follows x, feathered top and bottom (used by the hue track).
+pub fn fill_horizontal(p: &Painter, rect: Rect, steps: usize, color_at: impl Fn(f32) -> Color32) {
+    let f = feather(p) * 0.5;
+    let mut mesh = Mesh::default();
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let x = rect.left() + rect.width() * t;
+        let c = color_at(t);
+        mesh.colored_vertex(pos2(x, rect.top() - f), Color32::TRANSPARENT);
+        mesh.colored_vertex(pos2(x, rect.top() + f), c);
+        mesh.colored_vertex(pos2(x, rect.bottom() - f), c);
+        mesh.colored_vertex(pos2(x, rect.bottom() + f), Color32::TRANSPARENT);
+        if i > 0 {
+            let b = 4 * i as u32;
+            let a = b - 4;
+            for k in 0..3 {
+                mesh.add_triangle(a + k, a + k + 1, b + k);
+                mesh.add_triangle(a + k + 1, b + k + 1, b + k);
+            }
+        }
+    }
     p.add(Shape::mesh(mesh));
 }
 
 /// Soft radial glow fading to transparent.
 pub fn radial(p: &Painter, center: Pos2, radius: f32, color: Color32) {
-    const SEG: u32 = 36;
+    const SEG: u32 = 40;
     let mid = color.gamma_multiply(0.36);
     let mut mesh = Mesh::default();
     mesh.colored_vertex(center, color);
@@ -93,39 +242,32 @@ pub fn shadow(p: &Painter, rect: Rect, radius: f32, y: f32, blur: f32, alpha: u8
     p.add(s.as_shape(rect, Rounding::same(radius)));
 }
 
-/// The glass material: faint white body, light-catching top edge, hairline border.
-pub fn glass(p: &Painter, rect: Rect, radius: f32, weight: f32) {
-    shadow(p, rect, radius, 8.0, 24.0, (36.0 * weight) as u8);
-    fill_gradient(
-        p,
+// ---------------------------------------------------------------- material
+
+/// The glass material as shapes: soft shadow, faint white body, hairline border, light-catching top edge.
+pub fn glass_shapes(rect: Rect, radius: f32, weight: f32, feather: f32) -> Vec<Shape> {
+    let s = Shadow { offset: vec2(0.0, 10.0), blur: 30.0, spread: 0.0, color: Color32::from_black_alpha((36.0 * weight) as u8) };
+    let body = gradient_mesh(
         rect,
         radius,
-        Color32::from_white_alpha((20.0 * weight) as u8),
-        Color32::from_white_alpha((7.0 * weight) as u8),
+        Color32::from_white_alpha((19.0 * weight) as u8),
+        Color32::from_white_alpha((6.0 * weight) as u8),
+        feather,
     );
-    p.rect_stroke(rect, Rounding::same(radius), Stroke::new(1.0_f32, Color32::from_white_alpha(20)));
-    let y = rect.top() + 0.8;
-    p.line_segment(
-        [pos2(rect.left() + radius * 0.9, y), pos2(rect.right() - radius * 0.9, y)],
-        Stroke::new(1.0_f32, Color32::from_white_alpha(46)),
-    );
+    let y = rect.top() + 0.75;
+    vec![
+        Shape::from(s.as_shape(rect, Rounding::same(radius))),
+        Shape::mesh(body),
+        Shape::rect_stroke(rect, Rounding::same(radius), Stroke::new(1.0_f32, Color32::from_white_alpha(20))),
+        Shape::line_segment(
+            [pos2(rect.left() + radius * 0.9, y), pos2(rect.right() - radius * 0.9, y)],
+            Stroke::new(1.0_f32, Color32::from_white_alpha(44)),
+        ),
+    ]
 }
 
-pub fn galley(ui: &Ui, text: &str, size: f32, family: FontFamily, color: Color32, tracking: f32) -> Arc<Galley> {
-    let mut job = LayoutJob::default();
-    job.append(
-        text,
-        0.0,
-        TextFormat { font_id: FontId::new(size, family), color, extra_letter_spacing: tracking, ..Default::default() },
-    );
-    ui.fonts(|f| f.layout_job(job))
-}
-
-/// Small uppercase section caption.
-pub fn caption(ui: &mut Ui, text: &str) {
-    let g = galley(ui, &text.to_uppercase(), 11.0, semibold(), TEXT3, 0.9);
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), g.size().y), egui::Sense::hover());
-    ui.painter().galley(rect.min, g, TEXT3);
+pub fn glass(p: &Painter, rect: Rect, radius: f32, weight: f32) {
+    p.extend(glass_shapes(rect, radius, weight, feather(p)));
 }
 
 /// Wraps content in a glass card.
@@ -136,55 +278,46 @@ pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
         add(ui)
     });
     // The slot was reserved before the content, so the card lands behind it.
-    ui.painter().set(slot, Shape::Vec(glass_shapes(inner.response.rect, 20.0)));
+    let f = feather(ui.painter());
+    ui.painter().set(slot, Shape::Vec(glass_shapes(inner.response.rect, 20.0, 1.0, f)));
     inner.inner
 }
 
-/// Same look as [`glass`], returned as shapes so it can fill a reserved slot.
-pub fn glass_shapes(rect: Rect, radius: f32) -> Vec<Shape> {
-    let s = Shadow { offset: vec2(0.0, 10.0), blur: 30.0, spread: 0.0, color: Color32::from_black_alpha(38) };
-    let pts = rrect_path(rect, radius);
-    let top = Color32::from_white_alpha(19);
-    let bottom = Color32::from_white_alpha(6);
-    let shade = |y: f32| lerp_color(top, bottom, (y - rect.top()) / rect.height().max(1.0));
-    let mut mesh = Mesh::default();
-    mesh.colored_vertex(rect.center(), shade(rect.center().y));
-    pts.iter().for_each(|pt| mesh.colored_vertex(*pt, shade(pt.y)));
-    let n = pts.len() as u32;
-    (0..n).for_each(|i| mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n));
-    let y = rect.top() + 0.8;
-    vec![
-        Shape::from(s.as_shape(rect, Rounding::same(radius))),
-        Shape::mesh(mesh),
-        Shape::rect_stroke(rect, Rounding::same(radius), Stroke::new(1.0_f32, Color32::from_white_alpha(20))),
-        Shape::line_segment(
-            [pos2(rect.left() + radius * 0.9, y), pos2(rect.right() - radius * 0.9, y)],
-            Stroke::new(1.0_f32, Color32::from_white_alpha(44)),
-        ),
-    ]
-}
+// ---------------------------------------------------------------- glyphs
 
 pub fn sun(p: &Painter, c: Pos2, size: f32, color: Color32) {
-    p.circle_filled(c, size * 0.26, color);
+    p.circle_filled(c, size * 0.24, color);
     for i in 0..8 {
         let a = i as f32 / 8.0 * TAU;
         let d = vec2(a.cos(), a.sin());
-        p.line_segment([c + d * size * 0.42, c + d * size * 0.58], Stroke::new(size * 0.11, color));
+        p.line_segment([c + d * size * 0.40, c + d * size * 0.54], Stroke::new(size * 0.1, color));
     }
 }
 
 /// The halo logo: a conic ring with a soft glow.
 pub fn logo(p: &Painter, c: Pos2, r: f32) {
     radial(p, c, r * 2.2, Color32::from_rgba_unmultiplied(140, 110, 255, 60));
-    const SEG: usize = 72;
-    for i in 0..SEG {
-        let a0 = i as f32 / SEG as f32 * TAU;
-        let a1 = (i + 1) as f32 / SEG as f32 * TAU;
-        let col = crate::art::conic(a0);
-        let color = Color32::from_rgb((col[0] * 255.0) as u8, (col[1] * 255.0) as u8, (col[2] * 255.0) as u8);
-        p.line_segment(
-            [c + vec2(a0.cos(), a0.sin()) * r, c + vec2(a1.cos(), a1.sin()) * r],
-            Stroke::new(r * 0.24, color),
-        );
+    const SEG: usize = 96;
+    let mut mesh = Mesh::default();
+    let (inner, outer) = (r * 0.86, r * 1.14);
+    let f = feather(p) * 0.5;
+    for i in 0..=SEG {
+        let a = i as f32 / SEG as f32 * TAU;
+        let col = crate::art::conic(a);
+        let c32 = Color32::from_rgb((col[0] * 255.0) as u8, (col[1] * 255.0) as u8, (col[2] * 255.0) as u8);
+        let d = vec2(a.cos(), a.sin());
+        mesh.colored_vertex(c + d * (inner - f), Color32::TRANSPARENT);
+        mesh.colored_vertex(c + d * (inner + f), c32);
+        mesh.colored_vertex(c + d * (outer - f), c32);
+        mesh.colored_vertex(c + d * (outer + f), Color32::TRANSPARENT);
+        if i > 0 {
+            let b = 4 * i as u32;
+            let a0 = b - 4;
+            for k in 0..3 {
+                mesh.add_triangle(a0 + k, a0 + k + 1, b + k);
+                mesh.add_triangle(a0 + k + 1, b + k + 1, b + k);
+            }
+        }
     }
+    p.add(Shape::mesh(mesh));
 }

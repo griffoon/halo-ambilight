@@ -21,6 +21,7 @@ pub struct MonitorInfo {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Status {
     pub device: Option<DeviceInfo>,
     /// Human-readable note about the device search, empty when all is well.
@@ -44,7 +45,13 @@ pub enum ToDaemon {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum ToUi {
-    State { config: Config, status: Status },
+    State {
+        config: Config,
+        status: Status,
+        /// Service build; older builds omit it.
+        #[serde(default)]
+        version: String,
+    },
     Leds { c: Vec<[u8; 3]> },
 }
 

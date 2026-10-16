@@ -5,10 +5,12 @@ use crate::engine::{self, Shared};
 use crate::{art, ipc, log, openrgb};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HWND, LPARAM, WPARAM};
 use windows::Win32::System::Registry::{RegDeleteKeyValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
 use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -23,6 +25,8 @@ const WM_WAKE: u32 = WM_APP + 7;
 const RUN_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 pub const WINDOW_TITLE: &str = "Halo";
 const BRIGHTNESS_STEP: f32 = 0.05;
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+const REPLACE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy)]
 enum Hotkey {
@@ -41,13 +45,40 @@ impl Hotkey {
     }
 }
 
+/// Takes the single-instance mutex; `false` if another service already holds it.
+fn claim_instance() -> bool {
+    // SAFETY: on success the handle is kept for the life of the process; on a clash it is closed
+    // so the mutex can vanish once the other service exits.
+    unsafe {
+        match CreateMutexW(None, true, w!("Local\\HaloServiceMutex")) {
+            Ok(handle) if GetLastError() == ERROR_ALREADY_EXISTS => {
+                let _ = CloseHandle(handle);
+                false
+            }
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+}
+
+/// A different build of the service is running (e.g. after an update): ask it to step aside.
+fn replace_running_service() -> bool {
+    if ipc::running_version().as_deref() == Some(VERSION) {
+        return false;
+    }
+    ipc::request_quit();
+    let deadline = Instant::now() + REPLACE_TIMEOUT;
+    while Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(150));
+        if claim_instance() {
+            return true;
+        }
+    }
+    false
+}
+
 pub fn run(open_window: bool) {
-    // SAFETY: named mutex lives for the whole process; we only inspect the last error.
-    let first = unsafe {
-        let mutex = CreateMutexW(None, true, w!("Local\\HaloServiceMutex"));
-        mutex.is_ok() && GetLastError() != ERROR_ALREADY_EXISTS
-    };
-    if !first {
+    if !claim_instance() && !replace_running_service() {
         open_ui();
         return;
     }

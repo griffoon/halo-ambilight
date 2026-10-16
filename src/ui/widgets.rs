@@ -2,8 +2,7 @@
 //! and can be re-targeted mid-flight. Drags track the pointer 1:1 relative to where it was grabbed.
 
 use super::paint::{self, ACCENT, ACCENT_HI, TEXT, TEXT2};
-use egui::epaint::Mesh;
-use egui::{pos2, vec2, Align2, Color32, Context, FontFamily, FontId, Id, Rect, Response, Rounding, Sense, Shape, Stroke, Ui};
+use egui::{pos2, vec2, Align2, Color32, Context, Id, Rect, Response, Rounding, Sense, Stroke, Ui};
 use std::hash::Hash;
 use std::ops::RangeInclusive;
 
@@ -117,7 +116,7 @@ pub fn level(ui: &mut Ui, salt: impl Hash, value: &mut f32) -> Response {
     let label = format!("{:.0}%", *value * 100.0);
     let label_x = r.right() - 16.0;
     let label_col = if fill_clip.right() > label_x - 20.0 { Color32::from_black_alpha(170) } else { TEXT };
-    painter.text(pos2(label_x, r.center().y), Align2::RIGHT_CENTER, label, FontId::new(14.0, paint::semibold()), label_col);
+    paint::text(painter, pos2(label_x, r.center().y), Align2::RIGHT_CENTER, &label, paint::VALUE.color(label_col));
     resp
 }
 
@@ -152,8 +151,8 @@ pub fn slider(
     let p = press(ui, id, &resp);
     let painter = ui.painter();
 
-    painter.text(rect.left_top() + vec2(0.0, 2.0), Align2::LEFT_TOP, label, FontId::proportional(13.5), TEXT2);
-    painter.text(rect.right_top() + vec2(0.0, 2.0), Align2::RIGHT_TOP, fmt(*value), FontId::new(13.5, paint::semibold()), TEXT);
+    paint::text(painter, rect.left_top() + vec2(0.0, 1.0), Align2::LEFT_TOP, label, paint::BODY);
+    paint::text(painter, rect.right_top() + vec2(0.0, 1.0), Align2::RIGHT_TOP, &fmt(*value), paint::VALUE);
 
     painter.rect_filled(track, Rounding::same(3.0), Color32::from_white_alpha(26));
     let knob_x = track.left() + track.width() * t;
@@ -203,8 +202,8 @@ pub fn segmented(ui: &mut Ui, salt: impl Hash, labels: &[String], selected: &mut
         let near = (1.0 - (m.pos - i as f32).abs()).clamp(0.0, 1.0);
         let dim = if r.is_pointer_button_down_on() { 0.7 } else { 1.0 };
         let color = paint::lerp_color(TEXT2, TEXT, near).gamma_multiply(dim);
-        let family = if near > 0.5 { paint::semibold() } else { FontFamily::Proportional };
-        painter.text(cell.center(), Align2::CENTER_CENTER, &labels[i], FontId::new(13.5, family), color);
+        // One weight for every state, so labels never shift width as the pill slides.
+        paint::text(painter, cell.center(), Align2::CENTER_CENTER, &labels[i], paint::CONTROL.color(color));
     }
     changed
 }
@@ -256,20 +255,7 @@ pub fn hue(ui: &mut Ui, salt: impl Hash, value: &mut f32, preview: [u8; 3]) -> R
     let cap = track.height() * 0.5;
     painter.circle_filled(pos2(track.left(), track.center().y), cap, Color32::from_rgb(255, 0, 0));
     painter.circle_filled(pos2(track.right(), track.center().y), cap, Color32::from_rgb(255, 0, 0));
-    let mut mesh = Mesh::default();
-    for i in 0..=SEG {
-        let t = i as f32 / SEG as f32;
-        let c = crate::effects::to8(crate::effects::hsv(t, 1.0, 1.0));
-        let x = track.left() + track.width() * t;
-        mesh.colored_vertex(pos2(x, track.top()), paint::rgb(c));
-        mesh.colored_vertex(pos2(x, track.bottom()), paint::rgb(c));
-        if i > 0 {
-            let b = (i as u32) * 2;
-            mesh.add_triangle(b - 2, b - 1, b);
-            mesh.add_triangle(b - 1, b + 1, b);
-        }
-    }
-    painter.add(Shape::mesh(mesh));
+    paint::fill_horizontal(painter, track, SEG, |t| paint::rgb(crate::effects::to8(crate::effects::hsv(t, 1.0, 1.0))));
     let p = press(ui, id, &resp);
     let c = pos2(track.left() + track.width() * *value, track.center().y);
     let r = 11.0 * (1.0 + 0.12 * p);
@@ -283,7 +269,7 @@ pub fn stepper(ui: &mut Ui, salt: impl Hash, label: &str, value: &mut u16, max: 
     let id = ui.make_persistent_id(salt);
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::hover());
     let painter = ui.painter().clone();
-    painter.text(pos2(rect.left(), rect.center().y), Align2::LEFT_CENTER, label, FontId::proportional(14.0), TEXT);
+    paint::text(&painter, pos2(rect.left(), rect.center().y), Align2::LEFT_CENTER, label, paint::BODY);
     let plus = Rect::from_center_size(pos2(rect.right() - 15.0, rect.center().y), vec2(30.0, 30.0));
     let minus = Rect::from_center_size(pos2(rect.right() - 95.0, rect.center().y), vec2(30.0, 30.0));
     let mut changed = false;
@@ -306,12 +292,12 @@ pub fn stepper(ui: &mut Ui, salt: impl Hash, label: &str, value: &mut u16, max: 
             painter.line_segment([c - vec2(0.0, 5.0), c + vec2(0.0, 5.0)], s);
         }
     }
-    painter.text(
+    paint::text(
+        &painter,
         pos2((minus.center().x + plus.center().x) * 0.5, rect.center().y),
         Align2::CENTER_CENTER,
-        value.to_string(),
-        FontId::new(15.0, paint::semibold()),
-        TEXT,
+        &value.to_string(),
+        paint::Type { size: 15.0, face: paint::Face::Semibold, color: TEXT },
     );
     changed
 }
@@ -321,7 +307,7 @@ pub fn toggle_row(ui: &mut Ui, salt: impl Hash, label: &str, on: &mut bool) -> b
     let mut changed = false;
     ui.horizontal(|ui| {
         ui.set_min_height(34.0);
-        ui.label(egui::RichText::new(label).size(14.0).color(TEXT));
+        ui.label(paint::rich(label, paint::BODY));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             changed = toggle(ui, salt, on).changed();
         });
@@ -331,8 +317,7 @@ pub fn toggle_row(ui: &mut Ui, salt: impl Hash, label: &str, on: &mut bool) -> b
 
 pub fn pill_button(ui: &mut Ui, salt: impl Hash, label: &str) -> Response {
     let id = ui.make_persistent_id(salt);
-    let galley = paint::galley(ui, label, 13.5, paint::semibold(), TEXT, 0.0);
-    let size = vec2(galley.size().x + 32.0, 34.0);
+    let size = vec2(paint::text_width(ui, label, paint::CONTROL) + 32.0, 34.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let resp = ui.interact(rect, id, Sense::click());
     let p = press(ui, id, &resp);
@@ -341,7 +326,7 @@ pub fn pill_button(ui: &mut Ui, salt: impl Hash, label: &str) -> Response {
     let base = if resp.hovered() { 40 } else { 28 };
     paint::fill_gradient(painter, r, 17.0, Color32::from_white_alpha(base + 10), Color32::from_white_alpha(base - 8));
     painter.rect_stroke(r, Rounding::same(17.0), Stroke::new(1.0_f32, Color32::from_white_alpha(32)));
-    painter.galley(r.center() - galley.size() * 0.5, galley, TEXT);
+    paint::text(painter, r.center(), Align2::CENTER_CENTER, label, paint::CONTROL);
     resp
 }
 
@@ -388,7 +373,7 @@ pub fn disclosure(ui: &mut Ui, salt: impl Hash, title: &str, open: &mut bool) ->
     }
     let t = spring(ui.ctx(), id.with("open"), if *open { 1.0 } else { 0.0 }, 0.38, 1.0).pos;
     let painter = ui.painter();
-    painter.text(pos2(rect.left(), rect.center().y), Align2::LEFT_CENTER, title, FontId::new(15.0, paint::semibold()), TEXT);
+    paint::text(painter, pos2(rect.left(), rect.center().y), Align2::LEFT_CENTER, title, paint::SECTION);
     let c = pos2(rect.right() - 8.0, rect.center().y);
     let a = t * std::f32::consts::FRAC_PI_2;
     let rot = |v: egui::Vec2| vec2(v.x * a.cos() - v.y * a.sin(), v.x * a.sin() + v.y * a.cos());
