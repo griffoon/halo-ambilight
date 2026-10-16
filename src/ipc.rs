@@ -8,7 +8,7 @@ use crate::proto::{endpoint_path, Endpoint, ToDaemon, ToUi};
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::io::{self, BufRead, BufReader, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -53,10 +53,6 @@ pub fn connect() -> io::Result<TcpStream> {
     Ok(stream)
 }
 
-pub fn send_to_service(stream: &mut TcpStream, msg: &ToDaemon) -> io::Result<()> {
-    write_line(stream, msg)
-}
-
 /// Version of the service that is running now; empty for builds that predate the field.
 pub fn running_version() -> Option<String> {
     let stream = connect().ok()?;
@@ -70,9 +66,15 @@ pub fn running_version() -> Option<String> {
 }
 
 pub fn request_quit() {
-    if let Ok(mut stream) = connect() {
-        let _ = write_line(&mut stream, &ToDaemon::Quit);
+    let Ok(mut stream) = connect() else { return };
+    if write_line(&mut stream, &ToDaemon::Quit).is_err() {
+        return;
     }
+    // Closing while the service's greeting is still unread makes Windows reset the connection,
+    // and the service can lose the Quit before reading it. Half-close and drain instead.
+    let _ = stream.shutdown(Shutdown::Write);
+    let _ = stream.set_read_timeout(Some(HELLO_TIMEOUT));
+    let _ = io::copy(&mut stream, &mut io::sink());
 }
 
 fn random_token() -> String {
@@ -94,15 +96,17 @@ fn send(stream: &mut TcpStream, msg: &ToUi) -> io::Result<()> {
 
 fn client(shared: &Arc<Shared>, mut stream: TcpStream, token: &str) -> io::Result<()> {
     stream.set_nodelay(true)?;
-    stream.set_read_timeout(Some(HELLO_TIMEOUT))?;
+    // The timeout goes on the very handle that reads: on Windows a cloned socket keeps its own
+    // SO_RCVTIMEO, and a stale 2 s timeout here used to drop every idle window after 2 seconds.
     let mut reader = BufReader::new(stream.try_clone()?);
+    reader.get_ref().set_read_timeout(Some(HELLO_TIMEOUT))?;
     let mut hello = String::new();
     reader.read_line(&mut hello)?;
     match serde_json::from_str::<ToDaemon>(&hello) {
         Ok(ToDaemon::Hello { token: t }) if t == token => {}
         _ => return Ok(()),
     }
-    stream.set_read_timeout(None)?;
+    reader.get_ref().set_read_timeout(None)?;
 
     let alive = Arc::new(AtomicBool::new(true));
     {

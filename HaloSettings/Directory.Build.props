@@ -1,0 +1,8 @@
+<Project>
+  <!-- MakePri still trips over MAX_PATH; keep build output in a short folder outside the repo. -->
+  <PropertyGroup>
+    <HaloBuildRoot>$(LOCALAPPDATA)\HaloBuild\</HaloBuildRoot>
+    <BaseIntermediateOutputPath>$(HaloBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(HaloBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

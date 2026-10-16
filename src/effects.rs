@@ -20,6 +20,7 @@ pub struct Slot {
     pub b: f32,
 }
 
+#[cfg(test)]
 impl Slot {
     pub fn center(&self) -> (f32, f32) {
         let m = (self.a + self.b) * 0.5;

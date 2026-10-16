@@ -113,15 +113,20 @@ pub fn focus_ui() -> bool {
     }
 }
 
+/// The settings window is a separate WinUI 3 app shipped next to the service in `ui\`.
+fn ui_exe() -> Option<std::path::PathBuf> {
+    let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    Some(dir.join("ui").join("HaloSettings.exe"))
+}
+
 /// Brings the settings window forward, or launches it.
 pub fn open_ui() {
     if focus_ui() {
         return;
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Err(e) = std::process::Command::new(exe).arg("--ui").spawn() {
-            log::line(&format!("cannot start window: {e}"));
-        }
+    let Some(exe) = ui_exe() else { return };
+    if let Err(e) = std::process::Command::new(&exe).spawn() {
+        log::line(&format!("cannot start {}: {e}", exe.display()));
     }
 }
 

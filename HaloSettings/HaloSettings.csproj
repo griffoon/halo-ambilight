@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>HaloSettings</RootNamespace>
+    <AssemblyName>HaloSettings</AssemblyName>
+    <Version>0.5.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!--
+      Unpackaged on purpose: the Rust tray service launches this window directly, and an MSIX
+      package would need Developer Mode on this machine. Framework-dependent on the Windows App
+      Runtime 2.x that Windows already has installed: bundling it adds ~150 MB (ONNX, DirectML, ...).
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <!-- Needed even unpackaged: it is what copies resources.pri and the compiled XAML on publish. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <SelfContained>false</SelfContained>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
+    <!-- WUI3001 asks for partial [ObservableProperty] properties, which need C# 13 (.NET 9 SDK); this machine builds with .NET 8. -->
+    <NoWarn>$(NoWarn);WUI3001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinUIAnalyzer" Version="0.7.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <!--
+    The Windows App SDK metapackage drags in ONNX Runtime and DirectML (~40 MB) for on-device AI.
+    This window never touches those APIs, so they stay out of the published folder.
+  -->
+  <Target Name="DropUnusedAiRuntime" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)' == 'onnxruntime' Or '%(Filename)' == 'DirectML'" />
+    </ItemGroup>
+  </Target>
+</Project>
