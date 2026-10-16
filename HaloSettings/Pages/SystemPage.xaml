@@ -5,7 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:HaloSettings.Controls"
     xmlns:local="using:HaloSettings.Pages"
-    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Style="{StaticResource PageContentStyle}">
@@ -29,9 +30,40 @@
 
             <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="О программе" />
             <StackPanel controls:CardGroup.IsGroup="True">
-                <toolkit:SettingsCard Description="Подсветка за монитором для лент Skydimo" Header="{x:Bind Version, Mode=OneTime}">
+                <toolkit:SettingsCard Description="{x:Bind ViewModel.UpdateStatus, Mode=OneWay}" Header="{x:Bind ViewModel.VersionTitle, Mode=OneTime}">
                     <toolkit:SettingsCard.HeaderIcon>
                         <FontIcon Glyph="&#xE946;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                    <Grid>
+                        <Button
+                            Command="{x:Bind ViewModel.CheckForUpdatesCommand}"
+                            Content="Проверить обновления"
+                            Visibility="{x:Bind NoUpdate(ViewModel.Update), Mode=OneWay}" />
+                        <Button
+                            Command="{x:Bind ViewModel.DownloadUpdateCommand}"
+                            Content="Скачать"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Visibility="{x:Bind HasUpdate(ViewModel.Update), Mode=OneWay}" />
+                    </Grid>
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard
+                    ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
+                    Command="{x:Bind ViewModel.OpenRepoCommand}"
+                    Description="Исходный код, релизы и история изменений"
+                    Header="Halo на GitHub"
+                    IsClickEnabled="True">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE943;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard
+                    ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
+                    Command="{x:Bind ViewModel.ReportProblemCommand}"
+                    Description="Ошибки и идеи пишите в issues"
+                    Header="Сообщить о проблеме"
+                    IsClickEnabled="True">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xED15;" />
                     </toolkit:SettingsCard.HeaderIcon>
                 </toolkit:SettingsCard>
             </StackPanel>

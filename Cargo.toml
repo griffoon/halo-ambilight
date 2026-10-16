@@ -1,6 +1,6 @@
 [package]
 name = "halo"
-version = "0.8.3"
+version = "0.9.0"
 edition = "2021"
 description = "Lightweight ambient light controller for Skydimo LED strips"
 license = "Apache-2.0"

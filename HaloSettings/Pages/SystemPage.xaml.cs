@@ -1,4 +1,5 @@
-using System.Reflection;
+using HaloSettings.Services;
+using Microsoft.UI.Xaml;
 
 namespace HaloSettings.Pages;
 
@@ -9,6 +10,7 @@ public sealed partial class SystemPage : HaloPage
         InitializeComponent();
     }
 
-    public string Version { get; } =
-        $"Halo {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? ""}";
+    public Visibility HasUpdate(UpdateInfo? update) => update is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility NoUpdate(UpdateInfo? update) => update is null ? Visibility.Visible : Visibility.Collapsed;
 }

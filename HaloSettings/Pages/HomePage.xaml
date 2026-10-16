@@ -88,6 +88,15 @@
                 </InfoBar.ActionButton>
             </InfoBar>
             <InfoBar
+                IsOpen="{x:Bind ViewModel.UpdateOpen, Mode=TwoWay}"
+                Message="Новый релиз Halo уже на GitHub."
+                Severity="Informational"
+                Title="{x:Bind ViewModel.UpdateTitle, Mode=OneWay}">
+                <InfoBar.ActionButton>
+                    <Button Command="{x:Bind ViewModel.DownloadUpdateCommand}" Content="Скачать" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar
                 IsClosable="False"
                 IsOpen="{x:Bind ViewModel.ProblemOpen, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Problem, Mode=OneWay}"

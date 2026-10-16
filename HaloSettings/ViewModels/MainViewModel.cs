@@ -57,6 +57,7 @@ public sealed partial class MainViewModel : ObservableObject
         _link.LedsReceived += OnLedsReceived;
         _link.OnlineChanged += online => _ui.TryEnqueue(() => IsOnline = online);
         _link.Start();
+        _ = CheckForUpdatesAsync(silent: true);
     }
 
     /// <summary>Live strip colours, flat RGB, raised on the UI thread.</summary>
