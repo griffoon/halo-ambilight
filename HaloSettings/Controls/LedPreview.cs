@@ -33,7 +33,11 @@ public sealed partial class LedPreview : Grid
     private readonly TextBlock _caption;
     private readonly Compositor _compositor;
     private readonly ContainerVisual _glowRoot;
-    private readonly List<(SpriteVisual Glow, CompositionColorGradientStop Inner, CompositionColorGradientStop Mid, CompositionColorGradientStop Outer)> _leds = [];
+    private const double BottomFillDim = 0.8;
+    private const int BottomFillCount = 9;
+
+    private readonly List<GlowSpot> _leds = [];
+    private readonly List<Filler> _fillers = [];
     private IReadOnlyList<Slot> _slots = [];
     private byte[] _shown = [];
 
@@ -108,25 +112,86 @@ public sealed partial class LedPreview : Grid
         _slots = slots;
         _glowRoot.Children.RemoveAll();
         _leds.Clear();
+        _fillers.Clear();
         _shown = [];
-        var clear = Color.FromArgb(0, 0, 0, 0);
+        // Fillers first so they sit underneath the real LEDs.
+        foreach (var (x, y, nx, ny, a, b, weight, dim) in FillerPlan(layout))
+        {
+            var ia = Nearest(a, x, y) ?? Nearest(b, x, y);
+            var ib = Nearest(b, x, y) ?? ia;
+            if (ia is { } i && ib is { } j)
+            {
+                _fillers.Add(new Filler(NewSpot(), x, y, nx, ny, i, j, weight, dim));
+            }
+        }
         foreach (var _ in _slots)
         {
-            var inner = _compositor.CreateColorGradientStop(0, clear);
-            // A mid stop bends the falloff, so each glow has faded out before the edge of the control.
-            var mid = _compositor.CreateColorGradientStop(0.45f, clear);
-            var outer = _compositor.CreateColorGradientStop(1, clear);
-            var brush = _compositor.CreateRadialGradientBrush();
-            brush.ColorStops.Add(inner);
-            brush.ColorStops.Add(mid);
-            brush.ColorStops.Add(outer);
-            var glow = _compositor.CreateSpriteVisual();
-            glow.Size = new Vector2((float)GlowSize);
-            glow.Brush = brush;
-            _glowRoot.Children.InsertAtTop(glow);
-            _leds.Add((glow, inner, mid, outer));
+            _leds.Add(NewSpot());
         }
         Arrange();
+    }
+
+    private GlowSpot NewSpot()
+    {
+        var clear = Color.FromArgb(0, 0, 0, 0);
+        var inner = _compositor.CreateColorGradientStop(0, clear);
+        // A mid stop bends the falloff, so each glow has faded out before the edge of the control.
+        var mid = _compositor.CreateColorGradientStop(0.45f, clear);
+        var outer = _compositor.CreateColorGradientStop(1, clear);
+        var brush = _compositor.CreateRadialGradientBrush();
+        brush.ColorStops.Add(inner);
+        brush.ColorStops.Add(mid);
+        brush.ColorStops.Add(outer);
+        var glow = _compositor.CreateSpriteVisual();
+        glow.Size = new Vector2((float)GlowSize);
+        glow.Brush = brush;
+        _glowRoot.Children.InsertAtTop(glow);
+        return new GlowSpot(glow, inner, mid, outer);
+    }
+
+    /// <summary>
+    /// Spots with no LED of their own: the top corners, where the strip turns, and the bottom edge when
+    /// the strip does not run along it. Light from the neighbouring LEDs spills there on a real wall,
+    /// so each filler blends the nearest LED on two sides; without them the halo has bald patches.
+    /// </summary>
+    private static IEnumerable<(double X, double Y, double Nx, double Ny, Side A, Side B, double Weight, double Dim)> FillerPlan(StripLayout layout)
+    {
+        const double d = 0.7071;
+        yield return (0, 0, -d, -d, Side.Left, Side.Top, 0.5, 1);
+        yield return (1, 0, d, -d, Side.Top, Side.Right, 0.5, 1);
+        if (layout.Bottom > 0)
+        {
+            yield return (1, 1, d, d, Side.Right, Side.Bottom, 0.5, 1);
+            yield return (0, 1, -d, d, Side.Bottom, Side.Left, 0.5, 1);
+            yield break;
+        }
+        for (var k = 0; k < BottomFillCount; k++)
+        {
+            var x = (double)k / (BottomFillCount - 1);
+            yield return (x, 1, 0, 1, Side.Left, Side.Right, 1 - x, BottomFillDim);
+        }
+    }
+
+    private int? Nearest(Side side, double x, double y)
+    {
+        int? best = null;
+        var bestDistance = double.MaxValue;
+        for (var i = 0; i < _slots.Count; i++)
+        {
+            if (_slots[i].Side != side)
+            {
+                continue;
+            }
+            var (cx, cy) = _slots[i].Center;
+            var dx = (cx - x) * ScreenWidth;
+            var dy = (cy - y) * ScreenHeight;
+            var distance = dx * dx + dy * dy;
+            if (distance < bestDistance)
+            {
+                (best, bestDistance) = (i, distance);
+            }
+        }
+        return best;
     }
 
     /// <summary>Flat RGB, one triplet per LED in strip order.</summary>
@@ -140,11 +205,15 @@ public sealed partial class LedPreview : Grid
             {
                 continue;
             }
-            var led = _leds[i];
-            var (alpha, hue) = Glow(r, g, b);
-            led.Inner.Color = Color.FromArgb(alpha, hue.R, hue.G, hue.B);
-            led.Mid.Color = Color.FromArgb((byte)(alpha / 4), hue.R, hue.G, hue.B);
-            led.Outer.Color = Color.FromArgb(0, hue.R, hue.G, hue.B);
+            _leds[i].Paint(r, g, b);
+        }
+        foreach (var f in _fillers)
+        {
+            if (f.B * 3 + 2 >= rgb.Length || f.A * 3 + 2 >= rgb.Length)
+            {
+                continue;
+            }
+            f.Spot.Paint(f.Mix(rgb, 0), f.Mix(rgb, 1), f.Mix(rgb, 2));
         }
         _shown = rgb.ToArray();
     }
@@ -188,10 +257,35 @@ public sealed partial class LedPreview : Grid
                 Side.Right => (1.0, 0.0),
                 _ => (0.0, 1.0),
             };
-            _leds[i].Glow.Offset = new Vector3(
-                (float)(left + cx * ScreenWidth + nx * GlowOffset - GlowSize / 2),
-                (float)(top + cy * ScreenHeight + ny * GlowOffset - GlowSize / 2),
-                0);
+            _leds[i].Glow.Offset = SpotOffset(left, top, cx, cy, nx, ny);
         }
+        foreach (var f in _fillers)
+        {
+            f.Spot.Glow.Offset = SpotOffset(left, top, f.X, f.Y, f.Nx, f.Ny);
+        }
+    }
+
+    private static Vector3 SpotOffset(double left, double top, double cx, double cy, double nx, double ny) => new(
+        (float)(left + cx * ScreenWidth + nx * GlowOffset - GlowSize / 2),
+        (float)(top + cy * ScreenHeight + ny * GlowOffset - GlowSize / 2),
+        0);
+
+    private readonly record struct GlowSpot(
+        SpriteVisual Glow, CompositionColorGradientStop Inner, CompositionColorGradientStop Mid, CompositionColorGradientStop Outer)
+    {
+        public void Paint(byte r, byte g, byte b)
+        {
+            var (alpha, hue) = LedPreview.Glow(r, g, b);
+            Inner.Color = Color.FromArgb(alpha, hue.R, hue.G, hue.B);
+            Mid.Color = Color.FromArgb((byte)(alpha / 4), hue.R, hue.G, hue.B);
+            Outer.Color = Color.FromArgb(0, hue.R, hue.G, hue.B);
+        }
+    }
+
+    /// <summary>A glow with no LED of its own, painted as a blend of LEDs A and B.</summary>
+    private sealed record Filler(GlowSpot Spot, double X, double Y, double Nx, double Ny, int A, int B, double Weight, double Dim)
+    {
+        public byte Mix(ReadOnlySpan<byte> rgb, int channel) =>
+            (byte)Math.Round((rgb[A * 3 + channel] * Weight + rgb[B * 3 + channel] * (1 - Weight)) * Dim);
     }
 }
