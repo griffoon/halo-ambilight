@@ -1,0 +1,13 @@
+Halo
+Copyright 2026 Halo contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Halo is an independent project. It is not affiliated with, endorsed by or
+sponsored by Skydimo or its makers. "Skydimo" is used only to name the
+hardware Halo works with. Halo contains no Skydimo code: the serial protocol
+was observed from the behaviour of the original software and re-implemented.
+
+Third-party components used at build or run time keep their own licenses:
+Rust crates listed in Cargo.lock, and for the settings window the Windows App
+SDK, CommunityToolkit.Mvvm and CommunityToolkit.WinUI (MIT).

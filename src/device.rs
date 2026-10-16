@@ -126,10 +126,10 @@ mod tests {
 
     #[test]
     fn parses_identity_reply_from_sk0124() {
-        let reply = b"SK0124,<\x12\"\x03\x0c\x15\x02\r\n";
+        let reply = b"SK0124,\x01\x02\x03\x04\x05\x06\x07\r\n";
         let (model, serial) = parse_identity(reply).unwrap();
         assert_eq!(model, "SK0124");
-        assert_eq!(serial, "3C1222030C1502");
+        assert_eq!(serial, "01020304050607");
     }
 
     #[test]
