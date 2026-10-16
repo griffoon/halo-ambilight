@@ -70,13 +70,15 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _isOnline;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PowerSummary))]
     private bool _enabled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PowerSummary))]
     private double _brightness;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsScreen), nameof(IsColor), nameof(HasSpeed), nameof(ModeHint))]
+    [NotifyPropertyChangedFor(nameof(IsScreen), nameof(IsColor), nameof(HasSpeed), nameof(ModeHint), nameof(ModeName))]
     private int _modeIndex;
 
     [ObservableProperty]
@@ -104,19 +106,19 @@ public sealed partial class MainViewModel : ObservableObject
     private Color _color;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(LedCount))]
+    [NotifyPropertyChangedFor(nameof(LedCount), nameof(DeviceDetail))]
     private double _left;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(LedCount))]
+    [NotifyPropertyChangedFor(nameof(LedCount), nameof(DeviceDetail))]
     private double _top;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(LedCount))]
+    [NotifyPropertyChangedFor(nameof(LedCount), nameof(DeviceDetail))]
     private double _right;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(LedCount))]
+    [NotifyPropertyChangedFor(nameof(LedCount), nameof(DeviceDetail))]
     private double _bottom;
 
     [ObservableProperty]
@@ -136,8 +138,14 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _deviceTitle = "Подключение…";
 
+    /// <summary>COM port of the connected strip, empty when none.</summary>
     [ObservableProperty]
-    private string _deviceDetail = "";
+    [NotifyPropertyChangedFor(nameof(DeviceDetail))]
+    private string _devicePort = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeviceDetail))]
+    private string _deviceNote = "";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProblemOpen))]
@@ -157,6 +165,20 @@ public sealed partial class MainViewModel : ObservableObject
         2 => "Цвет плавно дышит",
         3 => "Радуга бежит по кругу",
         _ => "Медленные переливы бирюзы и фиолета",
+    };
+
+    // Derived, so the LED count is never read before the layout has arrived.
+    public string DeviceDetail => DevicePort.Length > 0 ? $"{DevicePort}, {LedCount}" : DeviceNote;
+
+    public string PowerSummary => Enabled ? $"Включена, яркость {Brightness:0}%" : "Выключена";
+
+    public string ModeName => ModeIndex switch
+    {
+        0 => "Экран",
+        1 => "Цвет",
+        2 => "Дыхание",
+        3 => "Радуга",
+        _ => "Аврора",
     };
 
     public StripLayout Layout => new((int)Left, (int)Top, (int)Right, (int)Bottom, Reverse);
@@ -271,12 +293,13 @@ public sealed partial class MainViewModel : ObservableObject
         if (s["device"] is JsonObject d)
         {
             DeviceTitle = $"Skydimo {Text(d["model"])}";
-            DeviceDetail = $"{Text(d["port"])}, {LedCount}";
+            DevicePort = Text(d["port"]);
         }
         else
         {
             DeviceTitle = "Лента не подключена";
-            DeviceDetail = Text(s["note"]) is { Length: > 0 } note ? note : "Ищу ленту…";
+            DevicePort = "";
+            DeviceNote = Text(s["note"]) is { Length: > 0 } note ? note : "Ищу ленту…";
         }
 
         var problems = new[] { Text(s["capture_error"]) }.Where(p => p.Length > 0);

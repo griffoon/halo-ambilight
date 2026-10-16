@@ -21,7 +21,6 @@ public sealed partial class HomePage : HaloPage
         ViewModel.PropertyChanged += OnViewModelChanged;
         Preview.SetLayout(ViewModel.Layout);
         SyncMode();
-        SyncCaption();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -42,11 +41,6 @@ public sealed partial class HomePage : HaloPage
                 break;
             case nameof(MainViewModel.ModeIndex):
                 SyncMode();
-                SyncCaption();
-                break;
-            case nameof(MainViewModel.Enabled):
-            case nameof(MainViewModel.MonitorIndex):
-                SyncCaption();
                 break;
         }
     }
@@ -72,14 +66,5 @@ public sealed partial class HomePage : HaloPage
         _syncingMode = true;
         ModeBar.SelectedItem = ModeBar.Items[index];
         _syncingMode = false;
-    }
-
-    private void SyncCaption()
-    {
-        var mode = ((SelectorBarItem)ModeBar.Items[Math.Clamp(ViewModel.ModeIndex, 0, ModeBar.Items.Count - 1)]).Text;
-        var monitorKnown = ViewModel.MonitorIndex >= 0 && ViewModel.MonitorIndex < ViewModel.Monitors.Count;
-        Preview.Caption = !ViewModel.Enabled ? "Подсветка выключена"
-            : ViewModel.IsScreen && monitorKnown ? ViewModel.Monitors[ViewModel.MonitorIndex]
-            : mode;
     }
 }

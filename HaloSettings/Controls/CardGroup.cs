@@ -5,8 +5,9 @@ using Microsoft.UI.Xaml.Media;
 namespace HaloSettings.Controls;
 
 /// <summary>
-/// Turns a StackPanel of SettingsCards into one block, the way Windows Settings groups
+/// Turns a StackPanel of rows into one block, the way Windows Settings groups
 /// "Bluetooth devices": a single rounded container with hairline dividers between rows.
+/// Rows are SettingsCards or other controls; a plain Border row works as an in-block header.
 /// </summary>
 public static class CardGroup
 {
@@ -38,16 +39,28 @@ public static class CardGroup
         panel.BorderBrush = Resource("CardStrokeColorDefaultBrush");
         panel.Background = Resource("CardBackgroundFillColorDefaultBrush");
 
-        var rows = panel.Children.OfType<Control>().Where(c => c.Visibility == Visibility.Visible).ToList();
+        var rows = panel.Children.OfType<FrameworkElement>().Where(c => c.Visibility == Visibility.Visible).ToList();
         var inner = Radius - 1;
         for (var i = 0; i < rows.Count; i++)
         {
             bool first = i == 0, last = i == rows.Count - 1;
-            var row = rows[i];
-            row.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            row.CornerRadius = new CornerRadius(first ? inner : 0, first ? inner : 0, last ? inner : 0, last ? inner : 0);
-            row.BorderThickness = new Thickness(0, 0, 0, last ? 0 : 1);
-            row.BorderBrush = Resource("DividerStrokeColorDefaultBrush");
+            var corners = new CornerRadius(first ? inner : 0, first ? inner : 0, last ? inner : 0, last ? inner : 0);
+            var divider = new Thickness(0, 0, 0, last ? 0 : 1);
+            var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            switch (rows[i])
+            {
+                case Control control:
+                    control.Background = transparent;
+                    control.CornerRadius = corners;
+                    control.BorderThickness = divider;
+                    control.BorderBrush = Resource("DividerStrokeColorDefaultBrush");
+                    break;
+                case Border border:
+                    border.CornerRadius = corners;
+                    border.BorderThickness = divider;
+                    border.BorderBrush = Resource("DividerStrokeColorDefaultBrush");
+                    break;
+            }
         }
     }
 }

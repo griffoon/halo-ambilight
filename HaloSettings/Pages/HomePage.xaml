@@ -7,35 +7,85 @@
     xmlns:local="using:HaloSettings.Pages"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
 
+    <Page.Resources>
+        <!-- In-block group header, as on the Settings home page -->
+        <Style x:Key="GroupHeaderStyle" TargetType="Border">
+            <Setter Property="Padding" Value="20,18,20,16" />
+        </Style>
+        <Style x:Key="TileIconStyle" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,2,12,0" />
+        </Style>
+    </Page.Resources>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Style="{StaticResource PageContentStyle}">
+        <StackPanel Spacing="12" Style="{StaticResource PageContentStyle}">
             <TextBlock Style="{StaticResource PageTitleStyle}" Text="Главная" />
 
-            <!-- Live preview and connection state -->
-            <Border
-                Padding="16,8,16,16"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8">
-                <StackPanel Spacing="2">
-                    <controls:LedPreview x:Name="Preview" />
+            <!-- Header: live thumbnail with the strip's glow, the strip's name, status tiles -->
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border
+                    Width="208"
+                    Height="130"
+                    Background="#FF0B0B0F"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                    <Viewbox Stretch="Uniform">
+                        <controls:LedPreview x:Name="Preview" Width="352" Height="220" />
+                    </Viewbox>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                     <TextBlock
-                        HorizontalAlignment="Center"
-                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="{x:Bind ViewModel.DeviceTitle, Mode=OneWay}" />
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="{x:Bind ViewModel.DeviceDetail, Mode=OneWay}"
-                        TextAlignment="Center"
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Text="{x:Bind ViewModel.DeviceTitle, Mode=OneWay}"
                         TextWrapping="Wrap" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Text="{x:Bind ViewModel.DeviceDetail, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                    <HyperlinkButton
+                        Margin="-11,2,0,0"
+                        Command="{x:Bind ViewModel.RescanCommand}"
+                        Content="Найти заново" />
                 </StackPanel>
-            </Border>
+            </Grid>
+
+            <Grid Margin="0,4,0,4" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <FontIcon Glyph="&#xE706;" Style="{StaticResource TileIconStyle}" />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Подсветка" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.PowerSummary, Mode=OneWay}" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <FontIcon Glyph="&#xE7F4;" Style="{StaticResource TileIconStyle}" />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Режим" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.ModeName, Mode=OneWay}" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
 
             <InfoBar
-                Margin="0,8,0,0"
                 IsClosable="False"
                 IsOpen="{x:Bind ViewModel.OfflineOpen, Mode=OneWay}"
                 Message="Без неё лента не получает цвета."
@@ -46,14 +96,21 @@
                 </InfoBar.ActionButton>
             </InfoBar>
             <InfoBar
-                Margin="0,8,0,0"
                 IsClosable="False"
                 IsOpen="{x:Bind ViewModel.ProblemOpen, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Problem, Mode=OneWay}"
                 Severity="Warning" />
 
-            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Свет" />
             <StackPanel controls:CardGroup.IsGroup="True">
+                <Border Style="{StaticResource GroupHeaderStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Свет" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="Включение и яркость подсветки" />
+                    </StackPanel>
+                </Border>
                 <toolkit:SettingsCard Description="{x:Bind ViewModel.ModeHint, Mode=OneWay}" Header="Подсветка">
                     <toolkit:SettingsCard.HeaderIcon>
                         <FontIcon Glyph="&#xE7E8;" />
@@ -72,18 +129,27 @@
                 </toolkit:SettingsCard>
             </StackPanel>
 
-            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Режим" />
-            <SelectorBar x:Name="ModeBar" Margin="-4,0,0,8" SelectionChanged="OnModeSelected">
-                <SelectorBarItem Text="Экран" />
-                <SelectorBarItem Text="Цвет" />
-                <SelectorBarItem Text="Дыхание" />
-                <SelectorBarItem Text="Радуга" />
-                <SelectorBarItem Text="Аврора" />
-            </SelectorBar>
             <StackPanel controls:CardGroup.IsGroup="True">
+                <Border Style="{StaticResource GroupHeaderStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Режим" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="{x:Bind ViewModel.ModeHint, Mode=OneWay}" />
+                    </StackPanel>
+                </Border>
+                <Border Padding="12,6,12,6">
+                    <SelectorBar x:Name="ModeBar" SelectionChanged="OnModeSelected">
+                        <SelectorBarItem Text="Экран" />
+                        <SelectorBarItem Text="Цвет" />
+                        <SelectorBarItem Text="Дыхание" />
+                        <SelectorBarItem Text="Радуга" />
+                        <SelectorBarItem Text="Аврора" />
+                    </SelectorBar>
+                </Border>
                 <toolkit:SettingsCard
                     Click="OnModeSettingsClick"
-                    Description="{x:Bind ViewModel.ModeHint, Mode=OneWay}"
                     Header="Настройки режима"
                     IsClickEnabled="True">
                     <toolkit:SettingsCard.HeaderIcon>

@@ -24,6 +24,11 @@ if ($Test) { Invoke-Low cargo @('test', '--release', '--bin', 'halo') }
 Invoke-Low cargo @('build', '--release', '--bins')
 
 New-Item -ItemType Directory -Force dist | Out-Null
+# A running copy from dist\ locks its files; stop it so the new build can land.
+$distRoot = (Resolve-Path dist).Path
+Get-Process Halo, HaloSettings -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($distRoot, [StringComparison]::OrdinalIgnoreCase) } |
+    ForEach-Object { $_.Kill(); $_.WaitForExit(3000) | Out-Null }
 Copy-Item target\release\halo.exe dist\Halo.exe -Force
 & target\release\halo-pack.exe dist\Halo.exe
 
