@@ -14,12 +14,11 @@ use std::time::{Duration, Instant};
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(3);
 const CAPTURE_RETRY: Duration = Duration::from_millis(1500);
-/// The strip blanks itself when frames stop for a while, so even a static colour is streamed
-/// steadily — the same 33 ms cadence SkyDimo used (`devUpdateInterval`).
-const KEEPALIVE: Duration = Duration::from_millis(33);
+/// Every mode streams at 60 fps. That is the ceiling of the link — a 54-LED frame is 168 bytes,
+/// about 15 ms at 115200 baud — and the strip blanks itself if frames stop, so even a static
+/// colour keeps flowing.
+const FRAME_INTERVAL: Duration = Duration::from_micros(16_667);
 const SAVE_DELAY: Duration = Duration::from_millis(800);
-const EFFECT_FPS: f32 = 40.0;
-const IDLE_TICK: Duration = KEEPALIVE;
 const FADE_SECONDS: f32 = 0.35;
 
 type Waker = Box<dyn Fn() + Send>;
@@ -141,8 +140,6 @@ impl Shared {
 struct Link {
     device: Option<Device>,
     next_probe: Instant,
-    last_sent: Vec<[u8; 3]>,
-    last_send_at: Instant,
 }
 
 impl Link {
@@ -157,7 +154,6 @@ impl Link {
                 shared.update_config(|c| Config { port_hint: Some(info.port.clone()), ..c.clone() });
                 shared.update_status(|s| Status { device: Some(info), note: String::new(), ..s.clone() });
                 self.device = Some(dev);
-                self.last_sent.clear();
             }
             Err(note) => {
                 shared.update_status(|s| Status { device: None, note, ..s.clone() });
@@ -168,22 +164,11 @@ impl Link {
 
     fn push(&mut self, shared: &Shared, frame: &[[u8; 3]]) {
         let Some(dev) = self.device.as_mut() else { return };
-        let changed = self.last_sent.as_slice() != frame;
-        if !changed && self.last_send_at.elapsed() < KEEPALIVE {
-            return;
-        }
-        match dev.send(frame) {
-            Ok(()) => {
-                self.last_sent.clear();
-                self.last_sent.extend_from_slice(frame);
-                self.last_send_at = Instant::now();
-            }
-            Err(e) => {
-                log::line(&format!("write failed: {e}"));
-                self.device = None;
-                self.next_probe = Instant::now() + Duration::from_millis(800);
-                shared.update_status(|s| Status { device: None, note: "Лента отключилась".into(), ..s.clone() });
-            }
+        if let Err(e) = dev.send(frame) {
+            log::line(&format!("write failed: {e}"));
+            self.device = None;
+            self.next_probe = Instant::now() + Duration::from_millis(800);
+            shared.update_status(|s| Status { device: None, note: "Лента отключилась".into(), ..s.clone() });
         }
     }
 }
@@ -250,7 +235,7 @@ pub fn spawn(shared: Arc<Shared>) -> thread::JoinHandle<()> {
 fn run(shared: &Shared) {
     shared.update_status(|s| Status { monitors: capture::list_monitors(), ..s.clone() });
 
-    let mut link = Link { device: None, next_probe: Instant::now(), last_sent: Vec::new(), last_send_at: Instant::now() };
+    let mut link = Link { device: None, next_probe: Instant::now() };
     let mut screen = Screen { capturer: None, retry_at: Instant::now(), zones: Zones::default(), bars: letterbox::Tracker::default() };
     let mut target: Vec<Rgb> = Vec::new();
     let mut current: Vec<Rgb> = Vec::new();
@@ -292,14 +277,12 @@ fn run(shared: &Shared) {
         let step = dt / FADE_SECONDS;
         fade = if fade < fade_target { (fade + step).min(1.0) } else { (fade - step).max(0.0) };
 
-        let tau = if screen_mode { cfg.screen.smoothing * 0.45 } else { 0.12 };
+        let tau = if screen_mode { cfg.screen.smoothing * 0.3 } else { 0.12 };
         let alpha = if tau < 0.005 { 1.0 } else { 1.0 - (-dt / tau).exp() };
-        let mut settled = true;
         for (c, t) in current.iter_mut().zip(&target) {
             for k in 0..3 {
                 let delta = t[k] - c[k];
                 c[k] += delta * alpha;
-                settled &= delta.abs() < 0.002;
             }
         }
 
@@ -315,16 +298,7 @@ fn run(shared: &Shared) {
         shared.publish_leds(&preview);
         shared.save_if_due();
 
-        let animating = cfg.enabled && cfg.mode != Mode::Solid;
-        let busy = screen_mode || animating || !settled || (fade - fade_target).abs() > f32::EPSILON;
-        let interval = if !busy {
-            IDLE_TICK
-        } else if screen_mode {
-            Duration::from_secs_f32(1.0 / cfg.screen.fps as f32)
-        } else {
-            Duration::from_secs_f32(1.0 / EFFECT_FPS)
-        };
-        if let Some(rest) = interval.checked_sub(tick_start.elapsed()) {
+        if let Some(rest) = FRAME_INTERVAL.checked_sub(tick_start.elapsed()) {
             thread::sleep(rest);
         }
     }

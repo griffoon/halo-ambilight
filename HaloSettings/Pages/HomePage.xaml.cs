@@ -20,6 +20,8 @@ public sealed partial class HomePage : HaloPage
         ViewModel.LedsUpdated += OnLeds;
         ViewModel.PropertyChanged += OnViewModelChanged;
         Preview.SetLayout(ViewModel.Layout);
+        // Static modes send colours only when they change, so start from the last frame seen.
+        Preview.SetColors(ViewModel.LastLeds);
         SyncMode();
     }
 
@@ -38,6 +40,7 @@ public sealed partial class HomePage : HaloPage
         {
             case nameof(MainViewModel.Layout):
                 Preview.SetLayout(ViewModel.Layout);
+                Preview.SetColors(ViewModel.LastLeds);
                 break;
             case nameof(MainViewModel.ModeIndex):
                 SyncMode();
@@ -45,11 +48,13 @@ public sealed partial class HomePage : HaloPage
         }
     }
 
-    private void OnModeSelected(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    private RadioButton[] ModeButtons => [Mode0, Mode1, Mode2, Mode3, Mode4];
+
+    private void OnModeChecked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        if (!_syncingMode && sender.SelectedItem is not null)
+        if (!_syncingMode && sender is RadioButton { Tag: string tag } && int.TryParse(tag, out var index))
         {
-            ViewModel.ModeIndex = sender.Items.IndexOf(sender.SelectedItem);
+            ViewModel.ModeIndex = index;
         }
     }
 
@@ -58,13 +63,13 @@ public sealed partial class HomePage : HaloPage
 
     private void SyncMode()
     {
-        var index = Math.Clamp(ViewModel.ModeIndex, 0, ModeBar.Items.Count - 1);
-        if (ModeBar.SelectedItem == ModeBar.Items[index])
+        var button = ModeButtons[Math.Clamp(ViewModel.ModeIndex, 0, ModeButtons.Length - 1)];
+        if (button.IsChecked == true)
         {
             return;
         }
         _syncingMode = true;
-        ModeBar.SelectedItem = ModeBar.Items[index];
+        button.IsChecked = true;
         _syncingMode = false;
     }
 }

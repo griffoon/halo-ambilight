@@ -129,34 +129,97 @@
                 </toolkit:SettingsCard>
             </StackPanel>
 
-            <StackPanel controls:CardGroup.IsGroup="True">
-                <Border Style="{StaticResource GroupHeaderStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Режим" />
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{x:Bind ViewModel.ModeHint, Mode=OneWay}" />
-                    </StackPanel>
-                </Border>
-                <Border Padding="12,6,12,6">
-                    <SelectorBar x:Name="ModeBar" SelectionChanged="OnModeSelected">
-                        <SelectorBarItem Text="Экран" />
-                        <SelectorBarItem Text="Цвет" />
-                        <SelectorBarItem Text="Дыхание" />
-                        <SelectorBarItem Text="Радуга" />
-                        <SelectorBarItem Text="Аврора" />
-                    </SelectorBar>
-                </Border>
-                <toolkit:SettingsCard
-                    Click="OnModeSettingsClick"
-                    Header="Настройки режима"
-                    IsClickEnabled="True">
-                    <toolkit:SettingsCard.HeaderIcon>
-                        <FontIcon Glyph="&#xE9E9;" />
-                    </toolkit:SettingsCard.HeaderIcon>
-                </toolkit:SettingsCard>
-            </StackPanel>
+            <!-- Same pattern as "Choose where to play sound" in Settings: an expander of radio rows -->
+            <toolkit:SettingsExpander
+                Description="Как лента выбирает цвета"
+                Header="Режим подсветки"
+                IsExpanded="True">
+                <toolkit:SettingsExpander.HeaderIcon>
+                    <FontIcon Glyph="&#xE7F4;" />
+                </toolkit:SettingsExpander.HeaderIcon>
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.ModeName, Mode=OneWay}" />
+                <toolkit:SettingsExpander.Items>
+                    <toolkit:SettingsCard ContentAlignment="Left">
+                        <RadioButton
+                            x:Name="Mode0"
+                            Checked="OnModeChecked"
+                            GroupName="Mode"
+                            Tag="0">
+                            <StackPanel>
+                                <TextBlock Text="Экран" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Лента повторяет края экрана" />
+                            </StackPanel>
+                        </RadioButton>
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard ContentAlignment="Left">
+                        <RadioButton
+                            x:Name="Mode1"
+                            Checked="OnModeChecked"
+                            GroupName="Mode"
+                            Tag="1">
+                            <StackPanel>
+                                <TextBlock Text="Цвет" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Один ровный цвет" />
+                            </StackPanel>
+                        </RadioButton>
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard ContentAlignment="Left">
+                        <RadioButton
+                            x:Name="Mode2"
+                            Checked="OnModeChecked"
+                            GroupName="Mode"
+                            Tag="2">
+                            <StackPanel>
+                                <TextBlock Text="Дыхание" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Цвет плавно дышит" />
+                            </StackPanel>
+                        </RadioButton>
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard ContentAlignment="Left">
+                        <RadioButton
+                            x:Name="Mode3"
+                            Checked="OnModeChecked"
+                            GroupName="Mode"
+                            Tag="3">
+                            <StackPanel>
+                                <TextBlock Text="Радуга" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Радуга бежит по кругу" />
+                            </StackPanel>
+                        </RadioButton>
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard ContentAlignment="Left">
+                        <RadioButton
+                            x:Name="Mode4"
+                            Checked="OnModeChecked"
+                            GroupName="Mode"
+                            Tag="4">
+                            <StackPanel>
+                                <TextBlock Text="Аврора" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Медленные переливы бирюзы и фиолета" />
+                            </StackPanel>
+                        </RadioButton>
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard
+                        Click="OnModeSettingsClick"
+                        Header="Настройки режима"
+                        IsClickEnabled="True" />
+                </toolkit:SettingsExpander.Items>
+            </toolkit:SettingsExpander>
         </StackPanel>
     </ScrollViewer>
 </local:HaloPage>

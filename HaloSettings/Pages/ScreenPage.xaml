@@ -27,15 +27,6 @@
                         ItemsSource="{x:Bind ViewModel.Monitors, Mode=OneTime}"
                         SelectedIndex="{x:Bind ViewModel.MonitorIndex, Mode=TwoWay}" />
                 </toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="Частота обновления">
-                    <toolkit:SettingsCard.HeaderIcon>
-                        <FontIcon Glyph="&#xE916;" />
-                    </toolkit:SettingsCard.HeaderIcon>
-                    <ComboBox MinWidth="200" SelectedIndex="{x:Bind ViewModel.FpsIndex, Mode=TwoWay}">
-                        <x:String>30 кадров в секунду</x:String>
-                        <x:String>60 кадров в секунду</x:String>
-                    </ComboBox>
-                </toolkit:SettingsCard>
             </StackPanel>
 
             <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Картинка" />

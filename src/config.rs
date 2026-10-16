@@ -70,14 +70,13 @@ pub struct ScreenSettings {
     pub saturation: f32,
     /// 0 = instant, 1 = very soft.
     pub smoothing: f32,
-    pub fps: u32,
     /// Crop letterbox/pillarbox bars so films light the strip edge to edge.
     pub letterbox: bool,
 }
 
 impl Default for ScreenSettings {
     fn default() -> Self {
-        Self { monitor: 0, depth: 0.12, saturation: 1.15, smoothing: 0.45, fps: 30, letterbox: true }
+        Self { monitor: 0, depth: 0.12, saturation: 1.15, smoothing: 0.45, letterbox: true }
     }
 }
 
@@ -154,7 +153,6 @@ impl Config {
                 depth: self.screen.depth.clamp(0.03, 0.45),
                 saturation: self.screen.saturation.clamp(0.0, 2.0),
                 smoothing: self.screen.smoothing.clamp(0.0, 1.0),
-                fps: self.screen.fps.clamp(10, 60),
                 ..self.screen
             },
             layout: Layout {

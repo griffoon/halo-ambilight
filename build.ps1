@@ -31,6 +31,8 @@ Get-Process Halo, HaloSettings -ErrorAction SilentlyContinue |
     ForEach-Object { $_.Kill(); $_.WaitForExit(3000) | Out-Null }
 Copy-Item target\release\halo.exe dist\Halo.exe -Force
 & target\release\halo-pack.exe dist\Halo.exe
+# One icon for both: the service's tray/exe icon and the window's taskbar icon.
+Copy-Item assets\halo.ico HaloSettings\Assets\AppIcon.ico -Force
 
 $ui = Join-Path $PSScriptRoot 'dist\ui'
 if (Test-Path $ui) { Remove-Item -Recurse -Force $ui }

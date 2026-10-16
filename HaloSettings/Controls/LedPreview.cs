@@ -26,6 +26,7 @@ public sealed partial class LedPreview : Grid
     private readonly TextBlock _caption;
     private readonly List<(Ellipse Glow, GradientStop Inner, GradientStop Outer)> _leds = [];
     private IReadOnlyList<Slot> _slots = [];
+    private byte[] _shown = [];
 
     public LedPreview()
     {
@@ -96,6 +97,7 @@ public sealed partial class LedPreview : Grid
         _slots = slots;
         _glow.Children.Clear();
         _leds.Clear();
+        _shown = [];
         foreach (var _ in _slots)
         {
             var inner = new GradientStop { Offset = 0, Color = Color.FromArgb(0, 0, 0, 0) };
@@ -118,12 +120,18 @@ public sealed partial class LedPreview : Grid
         for (var i = 0; i < _leds.Count && i * 3 + 2 < rgb.Length; i++)
         {
             byte r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
+            // Touching a brush re-rasterises its gradient; leave unchanged LEDs alone.
+            if (i * 3 + 2 < _shown.Length && _shown[i * 3] == r && _shown[i * 3 + 1] == g && _shown[i * 3 + 2] == b)
+            {
+                continue;
+            }
             // Light, not paint: a dark LED glows less and an unlit one not at all, never a black smudge.
             var alpha = (byte)(GlowAlpha * Math.Max(r, Math.Max(g, b)) / 255);
             var led = _leds[i];
             led.Inner.Color = Color.FromArgb(alpha, r, g, b);
             led.Outer.Color = Color.FromArgb(0, r, g, b);
         }
+        _shown = rgb.ToArray();
     }
 
     private void Arrange()

@@ -38,7 +38,7 @@ public sealed partial class MainViewModel : ObservableObject
     private static readonly HashSet<string> Persisted =
     [
         nameof(Enabled), nameof(Brightness), nameof(ModeIndex), nameof(MonitorIndex), nameof(Smoothing),
-        nameof(Saturation), nameof(Depth), nameof(FpsIndex), nameof(Letterbox), nameof(Speed), nameof(Color),
+        nameof(Saturation), nameof(Depth), nameof(Letterbox), nameof(Speed), nameof(Color),
         nameof(Left), nameof(Top), nameof(Right), nameof(Bottom), nameof(Reverse), nameof(Autostart),
         nameof(OpenRgbEnabled),
     ];
@@ -54,13 +54,39 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _ui = ui;
         _link.StateReceived += (config, status) => _ui.TryEnqueue(() => Apply(config, status));
-        _link.LedsReceived += leds => _ui.TryEnqueue(() => LedsUpdated?.Invoke(leds));
+        _link.LedsReceived += OnLedsReceived;
         _link.OnlineChanged += online => _ui.TryEnqueue(() => IsOnline = online);
         _link.Start();
     }
 
     /// <summary>Live strip colours, flat RGB, raised on the UI thread.</summary>
     public event Action<byte[]>? LedsUpdated;
+
+    /// <summary>Most recent strip colours, so a freshly opened page can show them straight away.</summary>
+    public byte[] LastLeds { get; private set; } = [];
+
+    // Only the newest frame matters: frames that arrive while one is queued replace it instead of
+    // piling up on the UI thread.
+    private byte[]? _pendingLeds;
+    private int _ledsQueued;
+
+    private void OnLedsReceived(byte[] leds)
+    {
+        Interlocked.Exchange(ref _pendingLeds, leds);
+        if (Interlocked.CompareExchange(ref _ledsQueued, 1, 0) != 0)
+        {
+            return;
+        }
+        _ui.TryEnqueue(() =>
+        {
+            Volatile.Write(ref _ledsQueued, 0);
+            if (Interlocked.Exchange(ref _pendingLeds, null) is { } latest)
+            {
+                LastLeds = latest;
+                LedsUpdated?.Invoke(latest);
+            }
+        });
+    }
 
     public ObservableCollection<string> Monitors { get; } = [];
     public ObservableCollection<OpenRgbDevice> OpenRgbDevices { get; } = [];
@@ -92,9 +118,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private double _depth;
-
-    [ObservableProperty]
-    private int _fpsIndex;
 
     [ObservableProperty]
     private bool _letterbox;
@@ -267,7 +290,6 @@ public sealed partial class MainViewModel : ObservableObject
         Smoothing = Math.Round(Num(s["smoothing"], 0.45) * 100);
         Saturation = Math.Round(Num(s["saturation"], 1.15) * 100);
         Depth = Math.Round(Num(s["depth"], 0.12) * 100);
-        FpsIndex = Num(s["fps"], 30) >= 45 ? 1 : 0;
         Letterbox = Flag(s["letterbox"], true);
 
         var l = c["layout"] as JsonObject ?? [];
@@ -369,7 +391,6 @@ public sealed partial class MainViewModel : ObservableObject
         s["smoothing"] = Smoothing / 100.0;
         s["saturation"] = Saturation / 100.0;
         s["depth"] = Depth / 100.0;
-        s["fps"] = FpsIndex == 1 ? 60 : 30;
         s["letterbox"] = Letterbox;
         c["screen"] = s;
 

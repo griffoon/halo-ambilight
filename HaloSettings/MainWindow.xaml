@@ -32,6 +32,18 @@
             OpenPaneLength="280"
             PaneDisplayMode="LeftMinimal"
             SelectionChanged="OnNavigationSelected">
+            <!--
+                Settings draws its pages straight on the Mica, with no separate content layer, so the
+                title bar and the page read as one surface. Drop the layer, its border and its corner.
+            -->
+            <NavigationView.Resources>
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
+                <Thickness x:Key="NavigationViewContentGridBorderThickness">0</Thickness>
+                <Thickness x:Key="NavigationViewMinimalContentGridBorderThickness">0</Thickness>
+                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
+                <CornerRadius x:Key="NavigationViewMinimalContentGridCornerRadius">0</CornerRadius>
+            </NavigationView.Resources>
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="Главная" Tag="home">
                     <NavigationViewItem.Icon>
