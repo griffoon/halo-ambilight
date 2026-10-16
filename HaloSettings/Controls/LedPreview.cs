@@ -20,7 +20,9 @@ public sealed partial class LedPreview : Grid
     private const double ScreenLift = 22;
     private const double GlowSize = 120;
     private const double GlowOffset = 20;
-    private const byte GlowAlpha = 110;
+    private const byte GlowAlpha = 130;
+    // Values this low are capture noise on a black frame; normalising them would paint speckles.
+    private const byte NoiseFloor = 6;
 
     private readonly Canvas _glow = new() { IsHitTestVisible = false };
     private readonly TextBlock _caption;
@@ -125,13 +127,29 @@ public sealed partial class LedPreview : Grid
             {
                 continue;
             }
-            // Light, not paint: a dark LED glows less and an unlit one not at all, never a black smudge.
-            var alpha = (byte)(GlowAlpha * Math.Max(r, Math.Max(g, b)) / 255);
             var led = _leds[i];
-            led.Inner.Color = Color.FromArgb(alpha, r, g, b);
-            led.Outer.Color = Color.FromArgb(0, r, g, b);
+            var (alpha, hue) = Glow(r, g, b);
+            led.Inner.Color = Color.FromArgb(alpha, hue.R, hue.G, hue.B);
+            led.Outer.Color = Color.FromArgb(0, hue.R, hue.G, hue.B);
         }
         _shown = rgb.ToArray();
+    }
+
+    /// <summary>
+    /// Light, not paint. The hue is shown at full strength and the glow's opacity follows the LED's
+    /// brightness on a square-root curve, so dim screen edges still read as their colour while an
+    /// unlit LED shows nothing at all, never a black smudge.
+    /// </summary>
+    private static (byte Alpha, Color Hue) Glow(byte r, byte g, byte b)
+    {
+        var peak = Math.Max(r, Math.Max(g, b));
+        if (peak < NoiseFloor)
+        {
+            return (0, Color.FromArgb(0, 0, 0, 0));
+        }
+        var scale = 255.0 / peak;
+        var hue = Color.FromArgb(255, (byte)(r * scale), (byte)(g * scale), (byte)(b * scale));
+        return ((byte)(GlowAlpha * Math.Sqrt(peak / 255.0)), hue);
     }
 
     private void Arrange()
